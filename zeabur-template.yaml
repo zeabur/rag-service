@@ -1,0 +1,133 @@
+# yaml-language-server: $schema=https://schema.zeabur.app/template.json
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: RAG Service
+spec:
+  description: |
+    Deploy your own RAG (Retrieval-Augmented Generation) service with admin dashboard.
+    Hybrid search (semantic + BM25), API key management, query analytics, and knowledge learning API.
+    Powered by InsForge (pgvector) and Zeabur AI Hub.
+  tags:
+    - AI
+    - RAG
+    - Search
+  variables:
+    - key: PUBLIC_DOMAIN
+      type: DOMAIN
+      name: Domain
+      description: Domain to bind the RAG service to
+    - key: INSFORGE_URL
+      type: STRING
+      name: InsForge Project URL
+      description: "e.g. https://xxx.us-east.insforge.app"
+    - key: INSFORGE_API_KEY
+      type: STRING
+      name: InsForge API Key
+      description: "starts with ik_..."
+    - key: INSFORGE_KEY
+      type: STRING
+      name: InsForge Anon Key
+      description: "starts with eyJ..."
+    - key: ZEABUR_AI_HUB_API_KEY
+      type: AI_HUB_KEY
+      name: Zeabur AI Hub API Key
+      description: Your Zeabur AI Hub API key for LLM inference
+  readme: |
+    # RAG Service
+
+    A complete RAG service with admin dashboard for managing your knowledge base.
+
+    ## Prerequisites
+
+    You need to prepare the following before deploying:
+
+    ### 1. InsForge (Database)
+
+    Enable InsForge from your Zeabur project: **Integration → InsForge → Enable InsForge**. Additional charges may apply based on usage ([pricing details](https://zeabur.com/docs/en-US/integrations/insforge/overview)). After enabling, go to InsForge **Project Settings → API** to find:
+
+    - **Project URL** (`INSFORGE_URL`): e.g. `https://xxx.us-east.insforge.app`
+    - **API Key** (`INSFORGE_API_KEY`): starts with `ik_...`
+    - **Anon Key** (`INSFORGE_KEY`): starts with `eyJ...`
+
+    ### 2. Zeabur AI Hub (LLM)
+
+    - **AI Hub API Key** (`ZEABUR_AI_HUB_API_KEY`): can be generated during deployment, or created in advance at [Zeabur AI Hub](https://zeabur.com/ai-hub)
+
+    Schema migrations (tables, indexes, functions) run automatically on first startup — no manual setup needed.
+
+    ## Features
+
+    - **Hybrid search**: semantic (pgvector) + BM25 keyword with RRF fusion
+    - **Streaming RAG answers** via configurable LLM model
+    - **Admin dashboard**: chunk browser, query signals, reports, audit log
+    - **API key management** with scopes and expiry
+    - **Knowledge learning API**: add new chunks via `/api/learn`
+    - **Feedback collection** on query results
+
+    ## API Endpoints
+
+    | Endpoint | Method | Description |
+    |----------|--------|-------------|
+    | `/api/query` | POST | RAG search + answer |
+    | `/api/learn` | POST | Add knowledge chunks |
+    | `/api/report` | POST | Report data issues |
+    | `/api/feedback` | POST | Submit feedback |
+    | `/api/admin/*` | GET/POST | Admin API (API key management, signals, reports, chunks) |
+    | `/dashboard` | GET | Admin dashboard (Basic Auth) |
+
+    ## Environment Variables
+
+    | Variable | Required | Description |
+    |----------|----------|-------------|
+    | `INSFORGE_URL` | Yes | InsForge backend URL |
+    | `INSFORGE_KEY` | Yes | InsForge anon key |
+    | `INSFORGE_API_KEY` | Yes | InsForge API key (ik_...) for schema migration |
+    | `ZEABUR_AI_HUB_API_KEY` | Yes | Zeabur AI Hub key for LLM inference |
+    | `RAG_API_KEY` | Auto | API key for service access (auto-generated) |
+    | `RAG_BASIC_AUTH` | Auto | Dashboard auth (auto-generated, format admin:password) |
+    | `RAG_MODEL` | No | LLM model (default: gemini-2.5-flash-lite) |
+    | `CORS_ORIGIN` | No | CORS origin (default: service URL) |
+
+    Schema migrations run automatically on first startup.
+
+    ## License
+
+    [MIT](https://github.com/zeabur/rag-service) — Built by [Zeabur](https://zeabur.com)
+  services:
+    - name: rag-service
+      template: PREBUILT_V2
+      domainKey: PUBLIC_DOMAIN
+      spec:
+        source:
+          image: zeabur/rag-service:latest
+        ports:
+          - id: web
+            port: 3000
+            type: HTTP
+        env:
+          INSFORGE_URL:
+            default: ${INSFORGE_URL}
+          INSFORGE_KEY:
+            default: ${INSFORGE_KEY}
+          INSFORGE_API_KEY:
+            default: ${INSFORGE_API_KEY}
+          ZEABUR_AI_HUB_API_KEY:
+            default: ${ZEABUR_AI_HUB_API_KEY}
+          ZEABUR_AI_HUB_URL:
+            default: "https://hnd1.aihub.zeabur.ai/v1"
+          RAG_API_KEY:
+            default: ${PASSWORD}
+          RAG_BASIC_AUTH:
+            default: "admin:${PASSWORD}"
+          RAG_MODEL:
+            default: "gemini-2.5-flash-lite"
+          CORS_ORIGIN:
+            default: ${ZEABUR_WEB_URL}
+        instructions:
+          - type: TEXT
+            title: Username
+            content: admin
+          - type: TEXT
+            title: RAG_API_KEY
+            content: ${PASSWORD}

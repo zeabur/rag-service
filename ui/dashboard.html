@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .sim-bar { height: 6px; border-radius: 3px; }
+    .slide-over-enter { animation: slideIn 0.2s ease-out; }
+    .slide-over-leave { animation: slideOut 0.15s ease-in; }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    @keyframes slideOut { from { transform: translateX(0); } to { transform: translateX(100%); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="dashboard()" x-init="init()">
+
+  <!-- Header -->
+  <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
+    <div class="flex items-center space-x-2">
+      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
+      <h1 class="text-lg font-semibold text-gray-800">RAG Dashboard</h1>
+    </div>
+    <div class="flex items-center space-x-3">
+      <div id="site-nav"></div>
+      <button @click="showSettings = true"
+        class="relative flex items-center space-x-1.5 border rounded-md px-3 py-1.5 bg-white transition"
+        :class="apiKey ? 'border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600' : 'border-orange-300 text-orange-500 hover:border-orange-400'"
+        title="Settings">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        <span class="text-sm">Settings</span>
+        <span x-show="apiKey" x-cloak class="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+      </button>
+      <button @click="reload()" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
+        重新整理
+      </button>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="border-b bg-white px-6">
+    <nav class="flex space-x-1">
+      <template x-for="tab in tabs" :key="tab.id">
+        <button @click="if(apiKey) { activeTab = tab.id }"
+          :class="[activeTab === tab.id ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700', !apiKey ? 'opacity-40 cursor-not-allowed' : '']"
+          :disabled="!apiKey"
+          class="px-4 py-3 text-sm font-medium transition flex items-center space-x-2">
+          <span x-text="tab.label"></span>
+          <span x-show="tab.count !== null" x-text="tab.count"
+            :class="activeTab === tab.id ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'"
+            class="text-xs px-1.5 py-0.5 rounded-full font-mono"></span>
+        </button>
+      </template>
+    </nav>
+  </div>
+
+  <!-- Content -->
+  <main class="p-6 max-w-7xl mx-auto">
+
+    <!-- Loading -->
+    <div x-show="loading" class="flex items-center justify-center py-20 text-gray-400">
+      <svg class="animate-spin w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      載入中...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error && !loading" class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
+      <span x-text="error === 'Unauthorized' ? 'Invalid API Key — click the settings button to update' : error"></span>
+    </div>
+
+    <!-- ── Signals Tab ── -->
+    <div x-show="activeTab === 'signals' && !loading && !error" x-cloak>
+      <!-- Stats row -->
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-gray-800" x-text="signalStats.total"></div>
+          <div class="text-xs text-gray-500 mt-1">總查詢數</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold" :class="signalStats.avgSim > 0.04 ? 'text-green-600' : 'text-orange-500'" x-text="signalStats.avgSim.toFixed(4)"></div>
+          <div class="text-xs text-gray-500 mt-1">平均 Top Similarity</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-red-500" x-text="signalStats.lowSimCount"></div>
+          <div class="text-xs text-gray-500 mt-1">低相似度查詢 (&lt; 0.03)</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-orange-500" x-text="signalStats.negFeedback"></div>
+          <div class="text-xs text-gray-500 mt-1">負評回饋</div>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="mb-4">
+        <input type="text" x-model="signalSearch" @input.debounce.400ms="signalPage = 0; loadSignals()"
+          class="w-full md:w-80 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="搜尋 Query...">
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Query</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Mode</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-40">Top Similarity</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Sources</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Client</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-16">FB</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">時間</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="s in signals" :key="s.id">
+              <tr class="hover:bg-gray-50 cursor-pointer" @click="openSignalDetail(s.id)">
+                <td class="px-4 py-3 text-gray-800 max-w-xs truncate" x-text="s.query"></td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full"
+                    :class="s.mode === 'hybrid' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'"
+                    x-text="s.mode"></span>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center space-x-2">
+                    <div class="flex-1 bg-gray-100 rounded sim-bar overflow-hidden">
+                      <div class="sim-bar h-full transition-all"
+                        :style="`width: ${Math.min((s.top_similarity || 0) * 1000, 100)}%`"
+                        :class="(s.top_similarity || 0) < 0.03 ? 'bg-red-400' : (s.top_similarity || 0) < 0.04 ? 'bg-orange-400' : 'bg-green-400'"></div>
+                    </div>
+                    <span class="text-xs font-mono text-gray-600 w-14 text-right"
+                      :class="(s.top_similarity || 0) < 0.03 ? 'text-red-500' : ''"
+                      x-text="s.top_similarity ? s.top_similarity.toFixed(5) : '—'"></span>
+                  </div>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex gap-1 items-center">
+                    <template x-for="cid in (s.top_chunk_ids || [])" :key="cid">
+                      <span class="w-2.5 h-2.5 rounded-full inline-block"
+                        :class="{
+                          'bg-blue-400': sourceFromId(cid) === 'docs',
+                          'bg-green-400': sourceFromId(cid) === 'forum',
+                          'bg-orange-400': sourceFromId(cid) === 'changelog',
+                          'bg-pink-400': sourceFromId(cid) === 'blog',
+                          'bg-purple-400': sourceFromId(cid) === 'learned',
+                          'bg-gray-300': sourceFromId(cid) === 'unknown'
+                        }"
+                        :title="cid"></span>
+                    </template>
+                  </div>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full"
+                    :class="{
+                      'bg-cyan-100 text-cyan-700': s.client === 'web-ui',
+                      'bg-violet-100 text-violet-700': s.client === 'mcp',
+                      'bg-gray-100 text-gray-600': !s.client || s.client === 'api'
+                    }"
+                    x-text="s.client || 'api'"></span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span x-show="s.feedback_score === 1" class="text-green-500 text-base">+1</span>
+                  <span x-show="s.feedback_score === -1" class="text-red-500 text-base">-1</span>
+                  <span x-show="!s.feedback_score" class="text-gray-300 text-xs">--</span>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="relativeTime(s.created_at)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="signals.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <!-- Pagination -->
+        <div x-show="signalTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
+          <span x-text="`顯示 ${signalPage * signalPageSize + 1}-${Math.min((signalPage + 1) * signalPageSize, signalTotal)} / 共 ${signalTotal}`"></span>
+          <div class="flex items-center space-x-2">
+            <select x-model.number="signalPageSize" @change="signalPage = 0; loadSignals()" class="border rounded px-2 py-1 text-xs">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button @click="signalPage = Math.max(0, signalPage - 1); loadSignals()" :disabled="signalPage === 0"
+              :class="signalPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">上一頁</button>
+            <button @click="signalPage++; loadSignals()" :disabled="(signalPage + 1) * signalPageSize >= signalTotal"
+              :class="(signalPage + 1) * signalPageSize >= signalTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">下一頁</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── All Chunks Tab ── -->
+    <div x-show="activeTab === 'chunks' && !loading && !error" x-cloak>
+      <!-- Filter bar -->
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <select x-model="chunkSourceFilter" @change="chunkPage = 0; loadChunks()" class="border rounded-lg px-3 py-2 text-sm">
+          <option value="">All Sources</option>
+          <template x-for="src in Object.keys(sourceStats.breakdown).sort()" :key="src">
+            <option :value="src" x-text="src"></option>
+          </template>
+        </select>
+        <select x-model="chunkStatusFilter" @change="chunkPage = 0; loadChunks()" class="border rounded-lg px-3 py-2 text-sm">
+          <option value="">全部狀態</option>
+          <option value="unverified">未驗證</option>
+          <option value="verified">已驗證</option>
+          <option value="rejected">已拒絕</option>
+        </select>
+        <select x-model="chunkVisibilityFilter" @change="chunkPage = 0; loadChunks()" class="border rounded-lg px-3 py-2 text-sm">
+          <option value="">全部可見性</option>
+          <option value="public">Public</option>
+          <option value="internal">Internal</option>
+        </select>
+        <input type="text" x-model="chunkSearch" @input.debounce.400ms="chunkPage = 0; loadChunks()"
+          class="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="搜尋 ID / Title...">
+        <!-- Bulk action -->
+        <div x-show="chunkSelected.length > 0" class="flex items-center gap-2 ml-auto">
+          <span class="text-xs text-gray-500" x-text="`已選 ${chunkSelected.length} 項`"></span>
+          <button @click="bulkVisibility('public')" class="text-xs px-2 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50">Set Public</button>
+          <button @click="bulkVisibility('internal')" class="text-xs px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50">Set Internal</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-3 py-3 w-8"><input type="checkbox" @change="toggleAllChunks($event)" :checked="chunkSelected.length === chunks.length && chunks.length > 0"></th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-36">ID</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Source</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Status</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Visibility</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Tags</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Created</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="c in chunks" :key="c.id">
+              <tr class="hover:bg-gray-50 cursor-pointer" @click="openChunkDetail(c.id)">
+                <td class="px-3 py-3" @click.stop>
+                  <input type="checkbox" :value="c.id" x-model="chunkSelected">
+                </td>
+                <td class="px-4 py-3 text-xs font-mono text-gray-500 truncate" x-text="c.id"></td>
+                <td class="px-4 py-3 text-gray-800 truncate max-w-xs" x-text="c.title || '(untitled)'"></td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="sourceBadgeClass(c.source)" x-text="c.source"></span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full"
+                    :class="statusBadgeClass(c.status)" x-text="statusLabel(c.status)"></span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full"
+                    :class="c.visibility === 'internal' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
+                    x-text="c.visibility || 'public'"></span>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="tag in (c.tags || []).slice(0, 3)" :key="tag">
+                      <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded" x-text="tag"></span>
+                    </template>
+                    <span x-show="(c.tags || []).length > 3" class="text-xs text-gray-400" x-text="'+' + ((c.tags || []).length - 3)"></span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="relativeTime(c.created_at)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="chunks.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <!-- Pagination -->
+        <div x-show="chunkTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
+          <span x-text="`顯示 ${chunkPage * chunkPageSize + 1}-${Math.min((chunkPage + 1) * chunkPageSize, chunkTotal)} / 共 ${chunkTotal}`"></span>
+          <div class="flex items-center space-x-2">
+            <select x-model.number="chunkPageSize" @change="chunkPage = 0; loadChunks()" class="border rounded px-2 py-1 text-xs">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button @click="chunkPage = Math.max(0, chunkPage - 1); loadChunks()" :disabled="chunkPage === 0"
+              :class="chunkPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">上一頁</button>
+            <button @click="chunkPage++; loadChunks()" :disabled="(chunkPage + 1) * chunkPageSize >= chunkTotal"
+              :class="(chunkPage + 1) * chunkPageSize >= chunkTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">下一頁</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Overview Tab (was Sources) ── -->
+    <div x-show="activeTab === 'overview' && !loading && !error" x-cloak>
+
+      <!-- Row 1: Summary Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-gray-800" x-text="overviewStats.totalChunks"></div>
+          <div class="text-xs text-gray-500 mt-1">Knowledge Chunks</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-indigo-600" x-text="overviewStats.totalQueries"></div>
+          <div class="text-xs text-gray-500 mt-1">Total Queries</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold" :class="overviewStats.avgSim > 0.04 ? 'text-green-600' : 'text-orange-500'" x-text="overviewStats.avgSim.toFixed(4)"></div>
+          <div class="text-xs text-gray-500 mt-1">Avg Similarity</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-green-600" x-text="overviewStats.posFeedback"></div>
+          <div class="text-xs text-gray-500 mt-1">Positive Feedback</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-red-500" x-text="overviewStats.negFeedback"></div>
+          <div class="text-xs text-gray-500 mt-1">Negative Feedback</div>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <div class="text-2xl font-bold text-yellow-600" x-text="overviewStats.openReports"></div>
+          <div class="text-xs text-gray-500 mt-1">Open Reports</div>
+        </div>
+      </div>
+
+      <!-- Row 2: Donut Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+        <!-- Knowledge Base Composition -->
+        <div class="bg-white rounded-xl border border-gray-200/80 p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-5">
+            <h3 class="text-sm font-semibold text-gray-800 tracking-wide uppercase">Knowledge Base</h3>
+            <span class="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded" x-text="sourceStats.total + ' chunks'"></span>
+          </div>
+          <div class="flex items-center gap-8">
+            <div class="relative w-36 h-36 flex-shrink-0">
+              <div class="w-36 h-36 rounded-full"
+                :style="`background: conic-gradient(${sourceConicGradient()})`"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-inner">
+                  <span class="text-lg font-bold text-gray-700" x-text="sourceStats.total"></span>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col gap-3 flex-1 text-sm">
+              <template x-for="item in sourceItems()" :key="item.key">
+                <div class="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded px-1 -mx-1 py-0.5"
+                  @click="chunkSourceFilter = item.key; chunkPage = 0; activeTab = 'chunks'; loadChunks()">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-sm inline-block" :style="'background:' + item.hex"></span>
+                    <span class="text-gray-600 hover:text-indigo-600" x-text="item.label"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-gray-800 tabular-nums" x-text="sourceStats.breakdown[item.key]"></span>
+                    <span class="text-gray-400 font-mono text-xs w-12 text-right" x-text="sourcePct(item.key) + '%'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Usage -->
+        <div class="bg-white rounded-xl border border-gray-200/80 p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-5">
+            <h3 class="text-sm font-semibold text-gray-800 tracking-wide uppercase">Search Usage</h3>
+            <span class="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded" x-text="sourceUsage.total + ' hits'"></span>
+          </div>
+          <div class="flex items-center gap-8">
+            <div class="relative w-36 h-36 flex-shrink-0">
+              <div class="w-36 h-36 rounded-full"
+                :style="sourceUsage.total ? `background: conic-gradient(${usageConicGradient()})` : 'background: #e5e7eb'"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-inner">
+                  <span class="text-lg font-bold text-gray-700" x-text="sourceUsage.total"></span>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col gap-3 flex-1 text-sm">
+              <template x-for="item in usageItems()" :key="item.key">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-sm inline-block" :style="'background:' + item.hex"></span>
+                    <span class="text-gray-600" x-text="item.label"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-gray-800 tabular-nums" x-text="sourceUsage[item.key]"></span>
+                    <span class="text-gray-400 font-mono text-xs w-12 text-right" x-text="usagePct(item.key) + '%'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Row 3: Client Distribution + Learned Status + API Keys -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Client Distribution -->
+        <div class="bg-white rounded-xl border border-gray-200/80 p-6 shadow-sm">
+          <h3 class="text-sm font-semibold text-gray-800 tracking-wide uppercase mb-4">Client Distribution</h3>
+          <div class="flex flex-col gap-3 text-sm">
+            <template x-for="c in overviewStats.clientBreakdown" :key="c.name">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-0.5 rounded-full"
+                    :class="{
+                      'bg-cyan-100 text-cyan-700': c.name === 'web-ui',
+                      'bg-violet-100 text-violet-700': c.name === 'mcp',
+                      'bg-indigo-100 text-indigo-700': c.name === 'claude-code',
+                      'bg-gray-100 text-gray-600': c.name === 'api' || !c.name,
+                    }" x-text="c.name || 'api'"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-gray-800 tabular-nums" x-text="c.count"></span>
+                  <div class="w-20 bg-gray-100 rounded h-2">
+                    <div class="bg-indigo-400 rounded h-2" :style="`width: ${overviewStats.totalQueries ? (c.count / overviewStats.totalQueries * 100) : 0}%`"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div x-show="overviewStats.clientBreakdown.length === 0" class="text-gray-400 text-xs">無資料</div>
+          </div>
+        </div>
+
+        <!-- Learned Chunks Status -->
+        <div class="bg-white rounded-xl border border-gray-200/80 p-6 shadow-sm">
+          <h3 class="text-sm font-semibold text-gray-800 tracking-wide uppercase mb-4">Learned Chunks</h3>
+          <div class="flex flex-col gap-3 text-sm">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-sm bg-yellow-400"></span>
+                <span class="text-gray-600">未驗證</span>
+              </div>
+              <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.learnedUnverified"></span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-sm bg-green-400"></span>
+                <span class="text-gray-600">已驗證</span>
+              </div>
+              <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.learnedVerified"></span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-sm bg-red-400"></span>
+                <span class="text-gray-600">已拒絕</span>
+              </div>
+              <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.learnedRejected"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- API Keys Status -->
+        <div class="bg-white rounded-xl border border-gray-200/80 p-6 shadow-sm">
+          <h3 class="text-sm font-semibold text-gray-800 tracking-wide uppercase mb-4">API Keys</h3>
+          <div class="flex flex-col gap-3 text-sm">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-sm bg-green-400"></span>
+                <span class="text-gray-600">Active</span>
+              </div>
+              <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.keysActive"></span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-sm bg-orange-400"></span>
+                <span class="text-gray-600">Expired</span>
+              </div>
+              <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.keysExpired"></span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-sm bg-red-400"></span>
+                <span class="text-gray-600">Revoked</span>
+              </div>
+              <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.keysRevoked"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Reports Tab ── -->
+    <div x-show="activeTab === 'reports' && !loading && !error" x-cloak>
+      <!-- Filter -->
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="text-sm text-gray-500">狀態：</span>
+        <template x-for="opt in [{v:'open',l:'開放'},{v:'closed',l:'已關閉'},{v:'all',l:'全部'}]" :key="opt.v">
+          <button @click="reportFilter = opt.v; loadReports()"
+            :class="reportFilter === opt.v ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'"
+            class="text-xs px-3 py-1.5 rounded-md transition" x-text="opt.l"></button>
+        </template>
+      </div>
+
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">類型</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Detail</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-36">Query</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Chunk</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">狀態</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">時間</th>
+              <th class="px-4 py-3 w-20"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="r in reports" :key="r.id">
+              <tr class="hover:bg-gray-50" :class="r.status === 'closed' ? 'bg-gray-50/60 text-gray-400' : ''">
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="{
+                      'bg-orange-100 text-orange-700': r.type === 'outdated',
+                      'bg-red-100 text-red-700': r.type === 'incorrect',
+                      'bg-blue-100 text-blue-700': r.type === 'missing'
+                    }" x-text="r.type"></span>
+                </td>
+                <td class="px-4 py-3 text-gray-700 max-w-xs" :class="r.status === 'closed' ? 'text-gray-400' : ''" x-text="r.detail || '—'"></td>
+                <td class="px-4 py-3 text-gray-500 text-xs truncate max-w-xs" x-text="r.query || '—'"></td>
+                <td class="px-4 py-3">
+                  <button x-show="r.chunk_id" @click.stop="openChunkDetail(r.chunk_id)"
+                    class="text-xs font-mono text-indigo-600 hover:text-indigo-800 hover:underline truncate"
+                    x-text="r.chunk_id"></button>
+                  <span x-show="!r.chunk_id" class="text-xs text-gray-400">--</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full"
+                    :class="r.status === 'open' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'"
+                    x-text="r.status"></span>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="relativeTime(r.created_at)"></td>
+                <td class="px-4 py-3 text-right">
+                  <button x-show="r.status === 'open'"
+                    @click="closeReport(r.id)"
+                    class="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded border hover:bg-gray-50 transition">
+                    關閉
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="reports.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+      </div>
+    </div>
+
+    <!-- ── Learned Tab ── -->
+    <div x-show="activeTab === 'learned' && !loading && !error" x-cloak>
+      <!-- Filter -->
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="text-sm text-gray-500">篩選：</span>
+        <template x-for="opt in [{v:'unverified',l:'未驗證'},{v:'verified',l:'已驗證'},{v:'rejected',l:'已拒絕'},{v:'all',l:'全部'}]" :key="opt.v">
+          <button @click="learnedFilter = opt.v; learnedPage = 0; loadLearned()"
+            :class="learnedFilter === opt.v ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'"
+            class="text-xs px-3 py-1.5 rounded-md transition" x-text="opt.l"></button>
+        </template>
+      </div>
+
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-36">ID</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Tags</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">狀態</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Visibility</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">時間</th>
+              <th class="px-2 py-3 w-32"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="c in learnedChunks" :key="c.id">
+              <tr>
+                <!-- Main row -->
+                <td colspan="7" class="p-0">
+                  <div class="flex items-center hover:bg-gray-50 cursor-pointer" @click="c._expanded = !c._expanded">
+                    <div class="px-4 py-3 text-xs font-mono text-gray-400 w-36 truncate flex-shrink-0" x-text="c.id"></div>
+                    <div class="px-4 py-3 text-gray-800 flex-1 truncate" x-text="c.title"></div>
+                    <div class="px-4 py-3 w-32 flex-shrink-0">
+                      <div class="flex flex-wrap gap-1">
+                        <template x-for="tag in (c.tags || []).slice(0, 2)" :key="tag">
+                          <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded" x-text="tag"></span>
+                        </template>
+                      </div>
+                    </div>
+                    <div class="px-4 py-3 w-20 flex-shrink-0">
+                      <span class="text-xs px-2 py-0.5 rounded-full"
+                        :class="statusBadgeClass(c.status || (c.verified ? 'verified' : 'unverified'))"
+                        x-text="statusLabel(c.status || (c.verified ? 'verified' : 'unverified'))"></span>
+                    </div>
+                    <div class="px-4 py-3 w-24 flex-shrink-0">
+                      <span class="text-xs px-2 py-0.5 rounded-full"
+                        :class="(c.visibility || 'public') === 'internal' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
+                        x-text="c.visibility || 'public'"></span>
+                    </div>
+                    <div class="px-4 py-3 text-xs text-gray-400 w-28 flex-shrink-0" x-text="relativeTime(c.created_at)"></div>
+                    <div class="px-2 py-3 w-32 flex-shrink-0 flex items-center justify-end gap-1" @click.stop>
+                      <button @click="toggleLearnedVisibility(c)"
+                        class="text-xs px-1.5 py-1 rounded border transition"
+                        :class="(c.visibility || 'public') === 'public' ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-green-600 border-green-200 hover:bg-green-50'"
+                        :title="(c.visibility || 'public') === 'public' ? 'Set Internal' : 'Set Public'"
+                        x-text="(c.visibility || 'public') === 'public' ? 'Int.' : 'Pub.'"></button>
+                      <button x-show="(c.status || (c.verified ? 'verified' : 'unverified')) !== 'verified'"
+                        @click="verifyChunk(c.id)"
+                        class="text-xs text-green-600 hover:text-green-800 px-1.5 py-1 rounded border border-green-200 hover:bg-green-50 transition"
+                        title="驗證通過">
+                        ✓
+                      </button>
+                      <button x-show="(c.status || (c.verified ? 'verified' : 'unverified')) !== 'rejected'"
+                        @click="rejectChunk(c.id)"
+                        class="text-xs text-red-500 hover:text-red-700 px-1.5 py-1 rounded border border-red-200 hover:bg-red-50 transition"
+                        title="拒絕">
+                        ✗
+                      </button>
+                    </div>
+                  </div>
+                  <!-- Expanded content -->
+                  <div x-show="c._expanded" x-cloak class="px-6 pb-4 bg-gray-50/50 border-t border-gray-100">
+                    <div class="grid grid-cols-1 gap-3 pt-3">
+                      <div>
+                        <div class="text-xs font-semibold text-gray-500 mb-1">Question</div>
+                        <div class="text-sm text-gray-800 whitespace-pre-wrap bg-white rounded p-3 border" x-text="c.question || c.title"></div>
+                      </div>
+                      <div>
+                        <div class="text-xs font-semibold text-gray-500 mb-1">Answer</div>
+                        <div class="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded p-3 border max-h-64 overflow-y-auto" x-text="c.answer || c.content || '(no content)'"></div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="learnedChunks.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <!-- Pagination -->
+        <div x-show="learnedTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
+          <span x-text="`顯示 ${learnedPage * learnedPageSize + 1}-${Math.min((learnedPage + 1) * learnedPageSize, learnedTotal)} / 共 ${learnedTotal}`"></span>
+          <div class="flex items-center space-x-2">
+            <select x-model.number="learnedPageSize" @change="learnedPage = 0; loadLearned()" class="border rounded px-2 py-1 text-xs">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button @click="learnedPage = Math.max(0, learnedPage - 1); loadLearned()" :disabled="learnedPage === 0"
+              :class="learnedPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">上一頁</button>
+            <button @click="learnedPage++; loadLearned()" :disabled="(learnedPage + 1) * learnedPageSize >= learnedTotal"
+              :class="(learnedPage + 1) * learnedPageSize >= learnedTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">下一頁</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Audit Log Tab ── -->
+    <div x-show="activeTab === 'audit' && !loading && !error" x-cloak>
+      <!-- Filter bar -->
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <select x-model="auditActionFilter" @change="auditPage = 0; loadAuditLog()" class="border rounded-lg px-3 py-2 text-sm">
+          <option value="">全部 Action</option>
+          <option value="create">Create</option>
+          <option value="verify">Verify</option>
+          <option value="reject">Reject</option>
+          <option value="visibility_change">Visibility Change</option>
+        </select>
+        <input type="text" x-model="auditChunkIdFilter" @input.debounce.400ms="auditPage = 0; loadAuditLog()"
+          class="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="搜尋 Chunk ID...">
+      </div>
+
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-40">Time</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Action</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-40">Chunk ID</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Changes</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="entry in auditLog" :key="entry.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-xs text-gray-500" x-text="relativeTime(entry.created_at)"></td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="auditActionBadge(entry.action)" x-text="entry.action"></span>
+                </td>
+                <td class="px-4 py-3">
+                  <button x-show="entry.chunk_id" @click="openChunkDetail(entry.chunk_id)"
+                    class="text-xs font-mono text-indigo-600 hover:text-indigo-800 hover:underline truncate"
+                    x-text="entry.chunk_id"></button>
+                  <span x-show="!entry.chunk_id" class="text-xs text-gray-400">--</span>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-600" x-text="formatAuditChanges(entry)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="auditLog.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <!-- Pagination -->
+        <div x-show="auditTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
+          <span x-text="`顯示 ${auditPage * auditPageSize + 1}-${Math.min((auditPage + 1) * auditPageSize, auditTotal)} / 共 ${auditTotal}`"></span>
+          <div class="flex items-center space-x-2">
+            <select x-model.number="auditPageSize" @change="auditPage = 0; loadAuditLog()" class="border rounded px-2 py-1 text-xs">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button @click="auditPage = Math.max(0, auditPage - 1); loadAuditLog()" :disabled="auditPage === 0"
+              :class="auditPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">上一頁</button>
+            <button @click="auditPage++; loadAuditLog()" :disabled="(auditPage + 1) * auditPageSize >= auditTotal"
+              :class="(auditPage + 1) * auditPageSize >= auditTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+              class="px-2 py-1 border rounded text-xs">下一頁</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── API Keys Tab ── -->
+    <div x-show="activeTab === 'keys' && !loading && !error" x-cloak>
+
+      <!-- Key created result modal -->
+      <div x-show="newKeyResult" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+          <h3 class="text-lg font-semibold text-gray-800 mb-3">API Key 已建立</h3>
+          <div class="mb-3">
+            <label class="block text-xs text-gray-500 mb-1">Key</label>
+            <div class="flex items-center space-x-2">
+              <input type="text" readonly :value="newKeyResult?.key || ''" class="flex-1 border rounded-lg px-3 py-2 text-sm font-mono bg-gray-50" @click="$el.select()">
+              <button @click="navigator.clipboard.writeText(newKeyResult?.key || '')" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">複製</button>
+            </div>
+          </div>
+          <p class="text-sm text-orange-600 font-medium mb-4">此 Key 只會顯示一次，請立即複製保存</p>
+          <button @click="newKeyResult = null; showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '' }"
+            class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">關閉</button>
+        </div>
+      </div>
+
+      <!-- Create key modal -->
+      <div x-show="showCreateKey && !newKeyResult" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">建立新 API Key</h3>
+
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Name</label>
+            <input type="text" x-model="newKey.name" class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. MCP Agent Key">
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-2">Scopes</label>
+            <div class="flex flex-wrap gap-2 mb-2">
+              <button @click="setPresetScopes('external')" class="text-xs px-2 py-1 border rounded-full hover:bg-gray-50">External Read-Only</button>
+              <button @click="setPresetScopes('agent')" class="text-xs px-2 py-1 border rounded-full hover:bg-gray-50">Internal Agent</button>
+              <button @click="setPresetScopes('admin')" class="text-xs px-2 py-1 border rounded-full hover:bg-gray-50">Admin</button>
+            </div>
+            <div class="space-y-2">
+              <div class="text-xs text-gray-400 font-medium">Read</div>
+              <div class="flex flex-wrap gap-2 ml-2">
+                <label class="flex items-center space-x-1.5 text-sm">
+                  <input type="checkbox" :checked="newKey.scopes.includes('read:public')" @change="toggleScope('read:public')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">read:public</span>
+                </label>
+                <label class="flex items-center space-x-1.5 text-sm">
+                  <input type="checkbox" :checked="newKey.scopes.includes('read:internal')" @change="toggleScope('read:internal')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">read:internal</span>
+                </label>
+              </div>
+              <div class="text-xs text-gray-400 font-medium">Write</div>
+              <div class="flex flex-wrap gap-2 ml-2">
+                <label class="flex items-center space-x-1.5 text-sm">
+                  <input type="checkbox" :checked="newKey.scopes.includes('write:learn')" @change="toggleScope('write:learn')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">write:learn</span>
+                </label>
+                <label class="flex items-center space-x-1.5 text-sm">
+                  <input type="checkbox" :checked="newKey.scopes.includes('write:report')" @change="toggleScope('write:report')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">write:report</span>
+                </label>
+                <label class="flex items-center space-x-1.5 text-sm">
+                  <input type="checkbox" :checked="newKey.scopes.includes('write:feedback')" @change="toggleScope('write:feedback')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700">write:feedback</span>
+                </label>
+              </div>
+              <div class="text-xs text-gray-400 font-medium">Admin</div>
+              <div class="flex flex-wrap gap-2 ml-2">
+                <label class="flex items-center space-x-1.5 text-sm">
+                  <input type="checkbox" :checked="newKey.scopes.includes('admin')" @change="toggleScope('admin')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">admin</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Client (optional)</label>
+            <input type="text" x-model="newKey.client" class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. mcp, web-ui">
+          </div>
+
+          <div class="mb-6">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Expires</label>
+            <select x-model="newKey.expires" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <option value="">Never</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+            </select>
+          </div>
+
+          <div class="flex space-x-3">
+            <button @click="createApiKey()" :disabled="!newKey.name || newKey.scopes.length === 0"
+              :class="!newKey.name || newKey.scopes.length === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-indigo-700'"
+              class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm transition">建立</button>
+            <button @click="showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '' }"
+              class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-medium text-gray-500">管理 API Keys</h2>
+        <button @click="showCreateKey = true" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">建立新 Key</button>
+      </div>
+
+      <!-- Keys table -->
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Name</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Prefix</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Scopes</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Client</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">Expires</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">Last Used</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Status</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="k in apiKeys" :key="k.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-gray-800 font-medium" x-text="k.name"></td>
+                <td class="px-4 py-3 font-mono text-xs text-gray-500" x-text="k.key_prefix + '...'"></td>
+                <td class="px-4 py-3">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="scope in (k.scopes || [])" :key="scope">
+                      <span class="text-xs px-2 py-0.5 rounded-full" :class="scopeBadgeClass(scope)" x-text="scope"></span>
+                    </template>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-500" x-text="k.client || '—'"></td>
+                <td class="px-4 py-3 text-xs text-gray-500" x-text="k.expires_at ? relativeTime(k.expires_at) : 'Never'"></td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="k.last_used_at ? relativeTime(k.last_used_at) : 'Never'"></td>
+                <td class="px-4 py-3">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="keyStatusClass(keyStatus(k))" x-text="keyStatus(k)"></span>
+                </td>
+                <td class="px-4 py-3">
+                  <button x-show="keyStatus(k) === 'active'" @click="revokeApiKey(k.id)"
+                    class="text-xs text-red-600 hover:text-red-800 hover:underline">Revoke</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="apiKeys.length === 0" class="py-12 text-center text-gray-400 text-sm">尚無 API Keys</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Detail Slide-Over Panel ── -->
+  <div x-show="detailOpen" x-cloak class="fixed inset-0 z-50 flex justify-end" @keydown.escape.window="detailOpen = false">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/20" @click="detailOpen = false"></div>
+    <!-- Panel -->
+    <div class="relative w-full max-w-2xl bg-white shadow-xl overflow-y-auto slide-over-enter"
+      x-show="detailOpen" x-transition:enter="slide-over-enter" x-transition:leave="slide-over-leave">
+      <!-- Close -->
+      <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
+        <h3 class="text-sm font-semibold text-gray-800" x-text="detailTitle"></h3>
+        <button @click="detailOpen = false" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-6" x-show="!detailLoading">
+
+        <!-- Signal Detail -->
+        <template x-if="detailType === 'signal' && detailData">
+          <div class="space-y-5">
+            <div>
+              <div class="text-xs font-semibold text-gray-500 mb-1">Query</div>
+              <div class="text-sm text-gray-800 bg-gray-50 rounded p-3 border" x-text="detailData.signal?.query"></div>
+            </div>
+            <div class="grid grid-cols-3 gap-3 text-sm">
+              <div><span class="text-xs text-gray-500">Mode</span><div class="font-medium" x-text="detailData.signal?.mode"></div></div>
+              <div><span class="text-xs text-gray-500">Top Similarity</span><div class="font-mono" x-text="detailData.signal?.top_similarity?.toFixed(5) || '—'"></div></div>
+              <div><span class="text-xs text-gray-500">Feedback</span>
+                <div>
+                  <span x-show="detailData.signal?.feedback_score === 1" class="text-green-600">+1</span>
+                  <span x-show="detailData.signal?.feedback_score === -1" class="text-red-600">-1</span>
+                  <span x-show="!detailData.signal?.feedback_score" class="text-gray-400">--</span>
+                </div>
+              </div>
+            </div>
+            <div x-show="detailData.signal?.feedback_text">
+              <div class="text-xs font-semibold text-gray-500 mb-1">Feedback Text</div>
+              <div class="text-sm text-gray-700 bg-gray-50 rounded p-3 border" x-text="detailData.signal?.feedback_text"></div>
+            </div>
+            <!-- Returned chunks -->
+            <div>
+              <div class="text-xs font-semibold text-gray-500 mb-2" x-text="`Returned Chunks (${(detailData.chunks || []).length})`"></div>
+              <div class="space-y-3">
+                <template x-for="(chunk, idx) in (detailData.chunks || [])" :key="chunk.id || idx">
+                  <div class="border rounded-lg p-4 bg-gray-50/50">
+                    <div class="flex items-center justify-between mb-2">
+                      <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0"
+                          :class="{
+                            'bg-blue-400': (chunk.source || sourceFromId(chunk.id)) === 'docs',
+                            'bg-green-400': (chunk.source || sourceFromId(chunk.id)) === 'forum',
+                            'bg-orange-400': (chunk.source || sourceFromId(chunk.id)) === 'changelog',
+                            'bg-pink-400': (chunk.source || sourceFromId(chunk.id)) === 'blog',
+                            'bg-purple-400': (chunk.source || sourceFromId(chunk.id)) === 'learned',
+                            'bg-gray-300': !chunk.source && sourceFromId(chunk.id) === 'unknown'
+                          }"></span>
+                        <button @click="openChunkDetail(chunk.id)" class="text-xs font-mono text-indigo-600 hover:underline" x-text="chunk.id"></button>
+                      </div>
+                      <span class="text-xs font-mono" :class="(chunk.similarity || 0) < 0.03 ? 'text-red-500' : 'text-gray-500'"
+                        x-text="chunk.similarity ? 'sim: ' + chunk.similarity.toFixed(5) : ''"></span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-800 mb-1" x-text="chunk.question || chunk.title || '(untitled)'"></div>
+                    <div class="text-xs text-gray-600 max-h-32 overflow-y-auto whitespace-pre-wrap" x-text="chunk.answer || chunk.content || ''"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Chunk Detail -->
+        <template x-if="detailType === 'chunk' && detailData">
+          <div class="space-y-5">
+            <!-- Deleted chunk -->
+            <template x-if="detailData.deleted">
+              <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 text-orange-700 text-sm">
+                此 Chunk 已被刪除或不存在。僅保留在 Audit Log 中作為歷史紀錄。
+              </div>
+            </template>
+            <template x-if="!detailData.deleted">
+            <div class="space-y-5">
+            <!-- Meta -->
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div><span class="text-xs text-gray-500">ID</span><div class="font-mono text-xs" x-text="detailData.chunk?.id"></div></div>
+              <div><span class="text-xs text-gray-500">Source</span>
+                <div><span class="text-xs px-2 py-0.5 rounded-full" :class="sourceBadgeClass(detailData.chunk?.source)" x-text="detailData.chunk?.source"></span></div>
+              </div>
+              <div><span class="text-xs text-gray-500">Status</span>
+                <div><span class="text-xs px-2 py-0.5 rounded-full" :class="statusBadgeClass(detailData.chunk?.status)" x-text="statusLabel(detailData.chunk?.status)"></span></div>
+              </div>
+              <div><span class="text-xs text-gray-500">Visibility</span>
+                <div><span class="text-xs px-2 py-0.5 rounded-full"
+                  :class="detailData.chunk?.visibility === 'internal' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
+                  x-text="detailData.chunk?.visibility || 'public'"></span></div>
+              </div>
+              <div><span class="text-xs text-gray-500">Created</span><div class="text-xs" x-text="detailData.chunk?.created_at ? new Date(detailData.chunk.created_at).toLocaleString() : '—'"></div></div>
+              <div x-show="detailData.chunk?.url"><span class="text-xs text-gray-500">URL</span>
+                <div><a :href="detailData.chunk?.url" target="_blank" class="text-xs text-indigo-600 hover:underline break-all" x-text="detailData.chunk?.url"></a></div>
+              </div>
+            </div>
+
+            <!-- Tags -->
+            <div x-show="(detailData.chunk?.tags || []).length">
+              <div class="text-xs font-semibold text-gray-500 mb-1">Tags</div>
+              <div class="flex flex-wrap gap-1">
+                <template x-for="tag in (detailData.chunk?.tags || [])" :key="tag">
+                  <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded" x-text="tag"></span>
+                </template>
+              </div>
+            </div>
+
+            <!-- Content -->
+            <div>
+              <div class="text-xs font-semibold text-gray-500 mb-1">Question</div>
+              <div class="text-sm text-gray-800 bg-gray-50 rounded p-3 border whitespace-pre-wrap" x-text="detailData.chunk?.question || detailData.chunk?.title || ''"></div>
+            </div>
+            <div>
+              <div class="text-xs font-semibold text-gray-500 mb-1">Answer</div>
+              <div class="text-sm text-gray-700 bg-gray-50 rounded p-3 border whitespace-pre-wrap max-h-64 overflow-y-auto" x-text="detailData.chunk?.answer || detailData.chunk?.content || ''"></div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 border-t pt-4">
+              <button @click="toggleChunkVisibility(detailData.chunk)"
+                class="text-xs px-3 py-1.5 rounded border transition"
+                :class="(detailData.chunk?.visibility || 'public') === 'public' ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-green-600 border-green-200 hover:bg-green-50'"
+                x-text="(detailData.chunk?.visibility || 'public') === 'public' ? 'Set Internal' : 'Set Public'"></button>
+              <button x-show="detailData.chunk?.source === 'learned' && detailData.chunk?.status !== 'verified'"
+                @click="verifyChunk(detailData.chunk?.id); openChunkDetail(detailData.chunk?.id)"
+                class="text-xs text-green-600 px-3 py-1.5 rounded border border-green-200 hover:bg-green-50 transition">驗證</button>
+              <button x-show="detailData.chunk?.source === 'learned' && detailData.chunk?.status !== 'rejected'"
+                @click="rejectChunk(detailData.chunk?.id); openChunkDetail(detailData.chunk?.id)"
+                class="text-xs text-red-500 px-3 py-1.5 rounded border border-red-200 hover:bg-red-50 transition">拒絕</button>
+            </div>
+
+            <!-- Related Reports -->
+            <div x-show="(detailData.reports || []).length > 0">
+              <div class="text-xs font-semibold text-gray-500 mb-2" x-text="`Related Reports (${detailData.reports.length})`"></div>
+              <div class="space-y-2">
+                <template x-for="r in detailData.reports" :key="r.id">
+                  <div class="border rounded p-3 text-xs">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="px-1.5 py-0.5 rounded-full font-medium"
+                        :class="{ 'bg-orange-100 text-orange-700': r.type==='outdated', 'bg-red-100 text-red-700': r.type==='incorrect', 'bg-blue-100 text-blue-700': r.type==='missing' }"
+                        x-text="r.type"></span>
+                      <span :class="r.status === 'open' ? 'text-yellow-600' : 'text-gray-400'" x-text="r.status"></span>
+                      <span class="text-gray-400 ml-auto" x-text="relativeTime(r.created_at)"></span>
+                    </div>
+                    <div class="text-gray-600" x-text="r.detail || '—'"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Related Signals -->
+            <div x-show="(detailData.signals || []).length > 0">
+              <div class="text-xs font-semibold text-gray-500 mb-2" x-text="`Related Signals (${detailData.signals.length})`"></div>
+              <div class="space-y-2">
+                <template x-for="s in detailData.signals" :key="s.id">
+                  <div class="border rounded p-3 text-xs">
+                    <div class="text-gray-800 mb-1" x-text="s.query"></div>
+                    <div class="flex items-center gap-2 text-gray-400">
+                      <span x-text="s.mode"></span>
+                      <span x-text="relativeTime(s.created_at)"></span>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Audit Log -->
+            <div x-show="(detailData.audit_log || []).length > 0">
+              <div class="text-xs font-semibold text-gray-500 mb-2" x-text="`Audit Log (${detailData.audit_log.length})`"></div>
+              <div class="space-y-1">
+                <template x-for="entry in detailData.audit_log" :key="entry.id">
+                  <div class="flex items-center gap-2 text-xs py-1">
+                    <span class="text-gray-400 w-28 flex-shrink-0" x-text="relativeTime(entry.created_at)"></span>
+                    <span class="px-1.5 py-0.5 rounded-full font-medium" :class="auditActionBadge(entry.action)" x-text="entry.action"></span>
+                    <span class="text-gray-500" x-text="formatAuditChanges(entry)"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+          </template>
+          </div>
+        </template>
+
+      </div>
+
+      <!-- Detail loading -->
+      <div x-show="detailLoading" class="flex items-center justify-center py-20 text-gray-400">
+        <svg class="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        載入中...
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div x-show="showSettings" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/30" @click.self="showSettings = false">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" @keydown.escape.window="showSettings = false">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-gray-800">API Key</h3>
+        <button @click="showSettings = false" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <input type="password" x-model="apiKeyInput" @input="saveApiKey()"
+        class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        placeholder="Enter API Key">
+      <p x-show="apiKey" x-cloak class="text-xs text-green-600 mt-1.5">Connected</p>
+      <p x-show="!apiKey" class="text-xs text-orange-500 mt-1.5">Not configured</p>
+    </div>
+  </div>
+
+  <script>
+    function dashboard() {
+      return {
+        apiKey: localStorage.getItem('rag_api_key') || '',
+        apiKeyInput: localStorage.getItem('rag_api_key') || '',
+        showSettings: false,
+        activeTab: 'overview',
+        loading: false,
+        error: null,
+        tabs: [
+          { id: 'overview', label: 'Overview', count: null },
+          { id: 'signals', label: 'Query Signals', count: null },
+          { id: 'chunks', label: 'All Chunks', count: null },
+          { id: 'reports', label: 'Reports', count: null },
+          { id: 'learned', label: 'Learned', count: null },
+          { id: 'audit', label: 'Audit Log', count: null },
+          { id: 'keys', label: 'API Keys', count: null },
+        ],
+
+        // Signals
+        signals: [],
+        signalStats: { total: 0, avgSim: 0, lowSimCount: 0, negFeedback: 0 },
+        signalSearch: '',
+        signalPage: 0,
+        signalPageSize: 50,
+        signalTotal: 0,
+
+        // Chunks
+        chunks: [],
+        chunkTotal: 0,
+        chunkPage: 0,
+        chunkPageSize: 50,
+        chunkSourceFilter: '',
+        chunkStatusFilter: '',
+        chunkVisibilityFilter: '',
+        chunkSearch: '',
+        chunkSelected: [],
+
+        // Sources
+        sourceStats: { total: 0, breakdown: {} },
+        sourceUsage: {},
+        overviewStats: {
+          totalChunks: 0, totalQueries: 0, avgSim: 0,
+          posFeedback: 0, negFeedback: 0, openReports: 0,
+          clientBreakdown: [],
+          learnedUnverified: 0, learnedVerified: 0, learnedRejected: 0,
+          keysActive: 0, keysExpired: 0, keysRevoked: 0,
+        },
+
+        // Reports
+        reports: [],
+        reportFilter: 'open',
+
+        // Learned
+        learnedChunks: [],
+        learnedFilter: 'unverified',
+        learnedPage: 0,
+        learnedPageSize: 50,
+        learnedTotal: 0,
+
+        // Audit log
+        auditLog: [],
+        auditTotal: 0,
+        auditPage: 0,
+        auditPageSize: 50,
+        auditActionFilter: '',
+        auditChunkIdFilter: '',
+
+        // API Keys
+        apiKeys: [],
+        showCreateKey: false,
+        newKeyResult: null,
+        newKey: { name: '', scopes: [], client: '', expires: '' },
+
+        // Detail panel
+        detailOpen: false,
+        detailType: '', // 'signal' | 'chunk'
+        detailTitle: '',
+        detailData: null,
+        detailLoading: false,
+
+        async init() {
+          // Auto-provision API key from Basic Auth session
+          if (!this.apiKey) {
+            try {
+              const base = `${location.protocol}//${location.host}`;
+              const r = await fetch(`${base}/api/auth/token`);
+              if (r.ok) {
+                const { token } = await r.json();
+                if (token) {
+                  this.apiKey = token;
+                  this.apiKeyInput = token;
+                  localStorage.setItem('rag_api_key', token);
+                }
+              }
+            } catch {}
+          }
+          if (!this.apiKey) this.showSettings = true;
+          await this.reload();
+          this.$watch('activeTab', () => this.loadTab());
+        },
+
+        saveApiKey() {
+          const key = this.apiKeyInput.trim();
+          this.apiKey = key;
+          if (key) localStorage.setItem('rag_api_key', key);
+          else localStorage.removeItem('rag_api_key');
+        },
+
+        async reload() {
+          await this.loadTab();
+          // Load tab counts in background
+          this.loadTabCounts();
+        },
+
+        async loadTabCounts() {
+          try {
+            const [chunks, sources] = await Promise.all([
+              this.apiFetch('/api/admin/chunks?limit=1&offset=0'),
+              this.apiFetch('/api/admin/source-stats'),
+            ]);
+            this.tabs.find(t => t.id === 'chunks').count = chunks.total || 0;
+            // overview tab doesn't show count
+          } catch {}
+        },
+
+        async loadTab() {
+          if (this.activeTab === 'signals') await this.loadSignals();
+          else if (this.activeTab === 'chunks') await this.loadChunks();
+          else if (this.activeTab === 'overview') await this.loadOverview();
+          else if (this.activeTab === 'reports') await this.loadReports();
+          else if (this.activeTab === 'learned') await this.loadLearned();
+          else if (this.activeTab === 'audit') await this.loadAuditLog();
+          else if (this.activeTab === 'keys') await this.loadApiKeys();
+        },
+
+        headers() {
+          return {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          };
+        },
+
+        async apiFetch(path, opts = {}) {
+          // Build absolute URL without credentials (browsers block fetch from credential-bearing URLs)
+          const base = `${location.protocol}//${location.host}`;
+          const r = await fetch(`${base}${path}`, { headers: this.headers(), ...opts });
+          if (!r.ok) {
+            const e = await r.json().catch(() => ({}));
+            const err = new Error(e.error || `HTTP ${r.status}`);
+            err.status = r.status;
+            if (r.status === 401) this.showSettings = true;
+            throw err;
+          }
+          return r.json();
+        },
+
+        async loadSignals() {
+          this.loading = true; this.error = null;
+          try {
+            const params = new URLSearchParams({
+              limit: this.signalPageSize,
+              offset: this.signalPage * this.signalPageSize,
+            });
+            if (this.signalSearch) params.set('search', this.signalSearch);
+            const res = await this.apiFetch(`/api/admin/signals?${params}`);
+            const data = res.data || res;
+            const total = res.total ?? data.length;
+            this.signals = data;
+            this.signalTotal = total;
+
+            // Compute stats from current page
+            const sims = data.filter(s => s.top_similarity != null).map(s => s.top_similarity);
+            const avgSim = sims.length ? sims.reduce((a, b) => a + b, 0) / sims.length : 0;
+            const lowSimCount = sims.filter(s => s < 0.03).length;
+            const negFeedback = data.filter(s => s.feedback_score === -1).length;
+            this.signalStats = { total, avgSim, lowSimCount, negFeedback };
+            this.tabs.find(t => t.id === 'signals').count = total;
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadChunks() {
+          this.loading = true; this.error = null;
+          try {
+            const params = new URLSearchParams({
+              limit: this.chunkPageSize,
+              offset: this.chunkPage * this.chunkPageSize,
+              sort_by: 'created_at',
+              sort_dir: 'desc',
+            });
+            if (this.chunkSourceFilter) params.set('source', this.chunkSourceFilter);
+            if (this.chunkStatusFilter) params.set('status', this.chunkStatusFilter);
+            if (this.chunkVisibilityFilter) params.set('visibility', this.chunkVisibilityFilter);
+            if (this.chunkSearch) params.set('search', this.chunkSearch);
+            const res = await this.apiFetch(`/api/admin/chunks?${params}`);
+            this.chunks = res.data || [];
+            this.chunkTotal = res.total || 0;
+            this.chunkSelected = [];
+            this.tabs.find(t => t.id === 'chunks').count = res.total || 0;
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadReports() {
+          this.loading = true; this.error = null;
+          try {
+            const data = await this.apiFetch(`/api/admin/reports?status=${this.reportFilter}`);
+            this.reports = data;
+            const openCount = this.reportFilter === 'open' ? data.length : data.filter(r => r.status === 'open').length;
+            this.tabs.find(t => t.id === 'reports').count = openCount;
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadLearned() {
+          this.loading = true; this.error = null;
+          try {
+            const params = new URLSearchParams({
+              status: this.learnedFilter,
+              limit: this.learnedPageSize,
+              offset: this.learnedPage * this.learnedPageSize,
+            });
+            const res = await this.apiFetch(`/api/admin/learned?${params}`);
+            const data = res.data || res;
+            const total = res.total ?? data.length;
+            // Add _expanded for expandable rows
+            this.learnedChunks = data.map(c => ({ ...c, _expanded: false }));
+            this.learnedTotal = total;
+            this.tabs.find(t => t.id === 'learned').count = total;
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadOverview() {
+          this.loading = true; this.error = null;
+          try {
+            const [stats, overview, signalRes] = await Promise.all([
+              this.apiFetch('/api/admin/source-stats'),
+              this.apiFetch('/api/admin/overview'),
+              this.apiFetch('/api/admin/signals?limit=200'),
+            ]);
+            this.sourceStats = stats;
+            this.overviewStats = { totalChunks: stats.total, ...overview };
+
+            // Source usage from signals (client-side, for donut chart only)
+            const signalData = signalRes.data || [];
+            const usage = { total: 0 };
+            for (const s of signalData) {
+              for (const cid of (s.top_chunk_ids || [])) {
+                const src = this.sourceFromId(cid);
+                usage[src] = (usage[src] || 0) + 1;
+                usage.total++;
+              }
+            }
+            this.sourceUsage = usage;
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadAuditLog() {
+          this.loading = true; this.error = null;
+          try {
+            const params = new URLSearchParams({
+              limit: this.auditPageSize,
+              offset: this.auditPage * this.auditPageSize,
+            });
+            if (this.auditActionFilter) params.set('action', this.auditActionFilter);
+            if (this.auditChunkIdFilter) params.set('chunk_id', this.auditChunkIdFilter);
+            const res = await this.apiFetch(`/api/admin/audit-log?${params}`);
+            this.auditLog = res.data || [];
+            this.auditTotal = res.total || 0;
+            this.tabs.find(t => t.id === 'audit').count = res.total || null;
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        // Detail panel
+        async openSignalDetail(id) {
+          this.detailOpen = true;
+          this.detailType = 'signal';
+          this.detailTitle = 'Signal Detail';
+          this.detailData = null;
+          this.detailLoading = true;
+          try {
+            this.detailData = await this.apiFetch(`/api/admin/signals/${id}`);
+          } catch (e) {
+            this.detailData = null;
+            this.error = e.message;
+          } finally {
+            this.detailLoading = false;
+          }
+        },
+
+        async openChunkDetail(id) {
+          if (!id) return;
+          this.detailOpen = true;
+          this.detailType = 'chunk';
+          this.detailTitle = `Chunk: ${id}`;
+          this.detailData = null;
+          this.detailLoading = true;
+          try {
+            this.detailData = await this.apiFetch(`/api/admin/chunks/${id}`);
+          } catch (e) {
+            if (e.status === 404) {
+              this.detailData = { chunk: null, deleted: true, error: e.message };
+            } else {
+              this.detailData = null;
+              this.error = e.message;
+            }
+          } finally {
+            this.detailLoading = false;
+          }
+        },
+
+        // Actions
+        async closeReport(id) {
+          await this.apiFetch(`/api/admin/reports/${id}/close`, { method: 'POST' });
+          await this.loadReports();
+        },
+
+        async verifyChunk(id) {
+          await this.apiFetch(`/api/admin/learned/${id}/verify`, { method: 'POST' });
+          await this.loadLearned();
+        },
+
+        async rejectChunk(id) {
+          if (!confirm(`確定要拒絕 ${id}？`)) return;
+          await this.apiFetch(`/api/admin/learned/${id}/reject`, { method: 'POST' });
+          await this.loadLearned();
+        },
+
+        async toggleChunkVisibility(chunk) {
+          if (!chunk) return;
+          const newVis = (chunk.visibility || 'public') === 'public' ? 'internal' : 'public';
+          await this.apiFetch(`/api/admin/chunks/${chunk.id}/visibility`, {
+            method: 'POST',
+            body: JSON.stringify({ visibility: newVis }),
+          });
+          // Refresh detail
+          if (this.detailOpen && this.detailType === 'chunk') {
+            await this.openChunkDetail(chunk.id);
+          }
+          // Refresh current tab
+          await this.loadTab();
+        },
+
+        async toggleLearnedVisibility(chunk) {
+          if (!chunk) return;
+          const newVis = (chunk.visibility || 'public') === 'public' ? 'internal' : 'public';
+          await this.apiFetch(`/api/admin/chunks/${chunk.id}/visibility`, {
+            method: 'POST',
+            body: JSON.stringify({ visibility: newVis }),
+          });
+          await this.loadLearned();
+        },
+
+        async bulkVisibility(visibility) {
+          if (this.chunkSelected.length === 0) return;
+          if (!confirm(`確定要將 ${this.chunkSelected.length} 項設為 ${visibility}？`)) return;
+          await this.apiFetch('/api/admin/chunks/bulk-visibility', {
+            method: 'POST',
+            body: JSON.stringify({ ids: this.chunkSelected, visibility }),
+          });
+          this.chunkSelected = [];
+          await this.loadChunks();
+        },
+
+        toggleAllChunks(e) {
+          if (e.target.checked) {
+            this.chunkSelected = this.chunks.map(c => c.id);
+          } else {
+            this.chunkSelected = [];
+          }
+        },
+
+        // Helpers
+        sourceFromId(id) {
+          if (!id) return 'unknown';
+          if (id.startsWith('DOC-')) return 'docs';
+          if (id.startsWith('SUP-')) return 'forum';
+          if (id.startsWith('CL-')) return 'changelog';
+          if (id.startsWith('BLOG-')) return 'blog';
+          if (id.startsWith('LEARNED-')) return 'learned';
+          return 'unknown';
+        },
+
+        _sourceColors: ['#3b82f6','#22c55e','#f97316','#ec4899','#a855f7','#14b8a6','#f59e0b','#ef4444','#6366f1','#84cc16'],
+
+        _colorFor(keys, idx) {
+          return this._sourceColors[idx % this._sourceColors.length];
+        },
+
+        sourceItems() {
+          const keys = Object.keys(this.sourceStats.breakdown).sort();
+          return keys.map((k, i) => ({ key: k, label: k, hex: this._colorFor(keys, i) }));
+        },
+
+        usageItems() {
+          const data = { ...this.sourceUsage }; delete data.total;
+          const keys = Object.keys(data).sort();
+          return keys.map((k, i) => ({ key: k, label: k, hex: this._colorFor(keys, i) }));
+        },
+
+        sourceConicGradient() {
+          const items = this.sourceItems();
+          if (!this.sourceStats.total) return '#e5e7eb 0% 100%';
+          let acc = 0;
+          return items.map(item => {
+            const pct = (this.sourceStats.breakdown[item.key] || 0) / this.sourceStats.total * 100;
+            const seg = `${item.hex} ${acc}% ${acc + pct}%`;
+            acc += pct;
+            return seg;
+          }).join(', ');
+        },
+
+        usageConicGradient() {
+          const items = this.usageItems();
+          if (!this.sourceUsage.total) return '#e5e7eb 0% 100%';
+          let acc = 0;
+          return items.map(item => {
+            const pct = (this.sourceUsage[item.key] || 0) / this.sourceUsage.total * 100;
+            const seg = `${item.hex} ${acc}% ${acc + pct}%`;
+            acc += pct;
+            return seg;
+          }).join(', ');
+        },
+
+        sourcePct(src) {
+          if (!this.sourceStats.total) return '0';
+          return ((this.sourceStats.breakdown[src] || 0) / this.sourceStats.total * 100).toFixed(1);
+        },
+
+        usagePct(src) {
+          if (!this.sourceUsage.total) return '0';
+          return ((this.sourceUsage[src] || 0) / this.sourceUsage.total * 100).toFixed(1);
+        },
+
+        sourceBadgeClass(source) {
+          const items = this.sourceItems();
+          const item = items.find(i => i.key === source);
+          if (!item) return 'bg-gray-100 text-gray-600';
+          return 'text-gray-700';
+        },
+
+        statusBadgeClass(status) {
+          if (status === 'verified') return 'bg-green-100 text-green-700';
+          if (status === 'rejected') return 'bg-red-100 text-red-700';
+          return 'bg-yellow-100 text-yellow-700';
+        },
+
+        statusLabel(status) {
+          if (status === 'verified') return '已驗證';
+          if (status === 'rejected') return '已拒絕';
+          return '未驗證';
+        },
+
+        async loadApiKeys() {
+          this.loading = true; this.error = null;
+          try {
+            const res = await this.apiFetch('/api/admin/keys');
+            this.apiKeys = res.data || [];
+            this.tabs.find(t => t.id === 'keys').count = res.total || 0;
+          } catch (e) { this.error = e.message; }
+          finally { this.loading = false; }
+        },
+
+        async createApiKey() {
+          try {
+            const body = { name: this.newKey.name, scopes: this.newKey.scopes, client: this.newKey.client || undefined };
+            if (this.newKey.expires) body.expires_in_days = parseInt(this.newKey.expires);
+            const res = await this.apiFetch('/api/admin/keys', { method: 'POST', body: JSON.stringify(body) });
+            this.newKeyResult = res;
+            await this.loadApiKeys();
+          } catch (e) { this.error = e.message; }
+        },
+
+        async revokeApiKey(id) {
+          if (!confirm('確定要撤銷此 Key？')) return;
+          await this.apiFetch(`/api/admin/keys/${id}/revoke`, { method: 'POST' });
+          await this.loadApiKeys();
+        },
+
+        keyStatus(k) {
+          if (k.revoked_at) return 'revoked';
+          if (k.expires_at && new Date(k.expires_at) < new Date()) return 'expired';
+          return 'active';
+        },
+
+        keyStatusClass(status) {
+          return { active: 'bg-green-100 text-green-700', expired: 'bg-orange-100 text-orange-700', revoked: 'bg-red-100 text-red-700' }[status] || 'bg-gray-100';
+        },
+
+        scopeBadgeClass(scope) {
+          return {
+            'read:public': 'bg-blue-100 text-blue-700',
+            'read:internal': 'bg-indigo-100 text-indigo-700',
+            'write:learn': 'bg-green-100 text-green-700',
+            'write:report': 'bg-orange-100 text-orange-700',
+            'write:feedback': 'bg-cyan-100 text-cyan-700',
+            'admin': 'bg-red-100 text-red-700',
+          }[scope] || 'bg-gray-100 text-gray-600';
+        },
+
+        toggleScope(scope) {
+          const idx = this.newKey.scopes.indexOf(scope);
+          if (idx >= 0) this.newKey.scopes.splice(idx, 1);
+          else this.newKey.scopes.push(scope);
+        },
+
+        setPresetScopes(preset) {
+          if (preset === 'external') this.newKey.scopes = ['read:public'];
+          else if (preset === 'agent') this.newKey.scopes = ['read:internal', 'write:learn', 'write:report', 'write:feedback'];
+          else if (preset === 'admin') this.newKey.scopes = ['read:public', 'read:internal', 'write:learn', 'write:report', 'write:feedback', 'admin'];
+        },
+
+        auditActionBadge(action) {
+          if (action === 'create') return 'bg-green-100 text-green-700';
+          if (action === 'verify') return 'bg-blue-100 text-blue-700';
+          if (action === 'reject') return 'bg-red-100 text-red-700';
+          if (action === 'visibility_change') return 'bg-purple-100 text-purple-700';
+          return 'bg-gray-100 text-gray-600';
+        },
+
+        formatAuditChanges(entry) {
+          if (!entry) return '';
+          if (entry.changes && typeof entry.changes === 'object') {
+            return Object.entries(entry.changes).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ');
+          }
+          if (entry.changes) return String(entry.changes);
+          if (entry.detail) return entry.detail;
+          return '';
+        },
+
+        relativeTime(iso) {
+          if (!iso) return '—';
+          const diff = Date.now() - new Date(iso).getTime();
+          const m = Math.floor(diff / 60000);
+          if (m < 1) return '剛剛';
+          if (m < 60) return `${m} 分鐘前`;
+          const h = Math.floor(m / 60);
+          if (h < 24) return `${h} 小時前`;
+          return `${Math.floor(h / 24)} 天前`;
+        },
+      };
+    }
+  </script>
+  <script src="/nav.js"></script>
+</body>
+</html>

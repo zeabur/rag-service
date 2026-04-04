@@ -1,0 +1,10 @@
+{
+  "name": "rag-service",
+  "description": "RAG knowledge base skills — search, learn, and report knowledge",
+  "version": "1.0.0",
+  "author": {
+    "name": "RAG Service"
+  },
+  "license": "MIT",
+  "keywords": ["rag", "knowledge-base", "search", "ai"]
+}

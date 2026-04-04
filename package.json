@@ -1,0 +1,12 @@
+{
+  "name": "rag-service",
+  "version": "1.0.0",
+  "description": "RAG Service with hybrid search, API key management, and Claude Code plugin",
+  "license": "MIT",
+  "scripts": {
+    "start": "bun run src/server.ts"
+  },
+  "dependencies": {
+    "@insforge/sdk": "^1.1.5"
+  }
+}

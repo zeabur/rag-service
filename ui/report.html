@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回報知識問題 — RAG Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col" x-data="reportApp()" x-init="init()">
+
+    <!-- Header -->
+    <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
+        <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">Z</div>
+            <h1 class="text-lg font-semibold text-gray-800">回報知識問題</h1>
+        </div>
+        <div id="site-nav"></div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 py-10 px-4">
+        <div class="max-w-2xl mx-auto">
+
+            <!-- Success state -->
+            <div x-show="submitted" x-cloak class="bg-green-50 border border-green-200 rounded-2xl p-8 text-center">
+                <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <h2 class="text-lg font-bold text-green-800 mb-1">已收到回報</h2>
+                <p class="text-sm text-green-600 mb-6">感謝你的回報，團隊會盡快處理。</p>
+                <div class="flex justify-center space-x-3">
+                    <button @click="reset()" class="px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition">再回報一筆</button>
+                    <a href="/" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">回搜尋頁</a>
+                </div>
+            </div>
+
+            <!-- Form -->
+            <div x-show="!submitted">
+                <p class="text-sm text-gray-500 mb-6">回報搜尋結果中不正確、過時或缺失的知識。</p>
+
+                <form @submit.prevent="submit()" class="space-y-5">
+
+                    <!-- Type -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">問題類型 <span class="text-red-400">*</span></label>
+                        <select x-model="form.type" required
+                                class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
+                            <option value="outdated">Outdated — 內容已過時</option>
+                            <option value="incorrect">Incorrect — 內容有誤</option>
+                            <option value="missing">Missing — 知識庫缺少這個主題</option>
+                        </select>
+                    </div>
+
+                    <!-- Chunk ID -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                            Chunk ID
+                            <span class="text-gray-400 font-normal ml-1">（選填，Missing 類型可留空）</span>
+                        </label>
+                        <input type="text" x-model="form.chunk_id"
+                               class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
+                               placeholder="SUP-1234 或 DOC-xxx">
+                    </div>
+
+                    <!-- Query -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                            搜尋查詢
+                            <span class="text-gray-400 font-normal ml-1">（選填）</span>
+                        </label>
+                        <input type="text" x-model="form.query"
+                               class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
+                               placeholder="當時搜尋的問題">
+                    </div>
+
+                    <!-- Detail -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">問題說明 <span class="text-red-400">*</span></label>
+                        <textarea x-model="form.detail" required rows="4"
+                                  class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-none"
+                                  placeholder="說明哪裡有問題、正確的答案是什麼等…"></textarea>
+                    </div>
+
+                    <!-- API Key -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">API Key</label>
+                        <input type="password" x-model="apiKey" @input="saveApiKey()"
+                               class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
+                               placeholder="rag_xxxxxxxxxxxxxxxx">
+                    </div>
+
+                    <!-- Error -->
+                    <div x-show="error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3" x-text="error"></div>
+
+                    <!-- Submit -->
+                    <button type="submit" :disabled="submitting"
+                            class="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">
+                        <span x-show="!submitting">送出回報</span>
+                        <span x-show="submitting" x-cloak>送出中...</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function reportApp() {
+            return {
+                form: { type: 'outdated', chunk_id: '', query: '', detail: '' },
+                apiKey: '',
+                submitted: false,
+                submitting: false,
+                error: '',
+
+                init() {
+                    this.apiKey = localStorage.getItem('rag_api_key') || '';
+                    const params = new URLSearchParams(window.location.search);
+                    const chunkId = params.get('chunk_id');
+                    const query = params.get('query');
+                    if (chunkId) {
+                        this.form.chunk_id = chunkId;
+                        // If chunk_id is provided, don't default to 'missing'
+                        this.form.type = 'outdated';
+                    }
+                    if (query) this.form.query = query;
+                },
+
+                saveApiKey() {
+                    const key = this.apiKey.trim();
+                    if (key) localStorage.setItem('rag_api_key', key);
+                    else localStorage.removeItem('rag_api_key');
+                },
+
+                async submit() {
+                    this.error = '';
+                    this.submitting = true;
+                    try {
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (this.apiKey) headers['Authorization'] = 'Bearer ' + this.apiKey;
+                        const body = { type: this.form.type, detail: this.form.detail };
+                        if (this.form.chunk_id.trim()) body.chunk_id = this.form.chunk_id.trim();
+                        if (this.form.query.trim()) body.query = this.form.query.trim();
+                        const res = await fetch('/api/report', {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify(body)
+                        });
+                        if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            throw new Error(data.error || `HTTP ${res.status}`);
+                        }
+                        this.submitted = true;
+                    } catch (err) {
+                        this.error = '送出失敗：' + err.message;
+                    } finally {
+                        this.submitting = false;
+                    }
+                },
+
+                reset() {
+                    this.form = { type: 'outdated', chunk_id: '', query: '', detail: '' };
+                    this.submitted = false;
+                    this.error = '';
+                    // Clear URL params
+                    window.history.replaceState({}, '', '/report');
+                }
+            }
+        }
+    </script>
+    <script src="/nav.js"></script>
+</body>
+</html>

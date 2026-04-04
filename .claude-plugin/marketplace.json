@@ -1,0 +1,13 @@
+{
+  "name": "rag-service",
+  "owner": {
+    "name": "RAG Service"
+  },
+  "plugins": [
+    {
+      "name": "rag-service",
+      "source": "./",
+      "description": "RAG knowledge base skills — search, learn, and report knowledge"
+    }
+  ]
+}

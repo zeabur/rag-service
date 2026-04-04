@@ -1,0 +1,5 @@
+{
+  "bun": {
+    "entry": "src/server.ts"
+  }
+}
