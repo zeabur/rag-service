@@ -6,7 +6,7 @@ A self-hosted RAG service with hybrid search (semantic + BM25), admin dashboard,
 
 ### 1. Create a Zeabur Project
 
-Go to [Zeabur Dashboard](https://dash.zeabur.com) and create a new project.
+Go to [Zeabur Dashboard](https://zeabur.com/projects) and create a new project.
 
 ### 2. Enable InsForge
 
