@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -34,7 +34,7 @@
         <span x-show="apiKey" x-cloak class="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></span>
       </button>
       <button @click="reload()" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
-        重新整理
+        Refresh
       </button>
     </div>
   </header>
@@ -65,7 +65,7 @@
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
       </svg>
-      載入中...
+      Loading...
     </div>
 
     <!-- Error -->
@@ -79,19 +79,19 @@
       <div class="grid grid-cols-4 gap-4 mb-6">
         <div class="bg-white rounded-lg border p-4">
           <div class="text-2xl font-bold text-gray-800" x-text="signalStats.total"></div>
-          <div class="text-xs text-gray-500 mt-1">總查詢數</div>
+          <div class="text-xs text-gray-500 mt-1">Total Queries</div>
         </div>
         <div class="bg-white rounded-lg border p-4">
           <div class="text-2xl font-bold" :class="signalStats.avgSim > 0.04 ? 'text-green-600' : 'text-orange-500'" x-text="signalStats.avgSim.toFixed(4)"></div>
-          <div class="text-xs text-gray-500 mt-1">平均 Top Similarity</div>
+          <div class="text-xs text-gray-500 mt-1">Avg Top Similarity</div>
         </div>
         <div class="bg-white rounded-lg border p-4">
           <div class="text-2xl font-bold text-red-500" x-text="signalStats.lowSimCount"></div>
-          <div class="text-xs text-gray-500 mt-1">低相似度查詢 (&lt; 0.03)</div>
+          <div class="text-xs text-gray-500 mt-1">Low Similarity (&lt; 0.03)</div>
         </div>
         <div class="bg-white rounded-lg border p-4">
           <div class="text-2xl font-bold text-orange-500" x-text="signalStats.negFeedback"></div>
-          <div class="text-xs text-gray-500 mt-1">負評回饋</div>
+          <div class="text-xs text-gray-500 mt-1">Negative Feedback</div>
         </div>
       </div>
 
@@ -99,7 +99,7 @@
       <div class="mb-4">
         <input type="text" x-model="signalSearch" @input.debounce.400ms="signalPage = 0; loadSignals()"
           class="w-full md:w-80 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="搜尋 Query...">
+          placeholder="Search queries...">
       </div>
 
       <!-- Table -->
@@ -113,7 +113,7 @@
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Sources</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Client</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-16">FB</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">時間</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">Time</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -172,10 +172,10 @@
             </template>
           </tbody>
         </table>
-        <div x-show="signals.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <div x-show="signals.length === 0" class="py-12 text-center text-gray-400 text-sm">No data</div>
         <!-- Pagination -->
         <div x-show="signalTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
-          <span x-text="`顯示 ${signalPage * signalPageSize + 1}-${Math.min((signalPage + 1) * signalPageSize, signalTotal)} / 共 ${signalTotal}`"></span>
+          <span x-text="`Showing ${signalPage * signalPageSize + 1}-${Math.min((signalPage + 1) * signalPageSize, signalTotal)} of ${signalTotal}`"></span>
           <div class="flex items-center space-x-2">
             <select x-model.number="signalPageSize" @change="signalPage = 0; loadSignals()" class="border rounded px-2 py-1 text-xs">
               <option value="25">25</option>
@@ -184,10 +184,10 @@
             </select>
             <button @click="signalPage = Math.max(0, signalPage - 1); loadSignals()" :disabled="signalPage === 0"
               :class="signalPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">上一頁</button>
+              class="px-2 py-1 border rounded text-xs">Prev</button>
             <button @click="signalPage++; loadSignals()" :disabled="(signalPage + 1) * signalPageSize >= signalTotal"
               :class="(signalPage + 1) * signalPageSize >= signalTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">下一頁</button>
+              class="px-2 py-1 border rounded text-xs">Next</button>
           </div>
         </div>
       </div>
@@ -204,22 +204,22 @@
           </template>
         </select>
         <select x-model="chunkStatusFilter" @change="chunkPage = 0; loadChunks()" class="border rounded-lg px-3 py-2 text-sm">
-          <option value="">全部狀態</option>
-          <option value="unverified">未驗證</option>
-          <option value="verified">已驗證</option>
-          <option value="rejected">已拒絕</option>
+          <option value="">All Status</option>
+          <option value="unverified">Unverified</option>
+          <option value="verified">Verified</option>
+          <option value="rejected">Rejected</option>
         </select>
         <select x-model="chunkVisibilityFilter" @change="chunkPage = 0; loadChunks()" class="border rounded-lg px-3 py-2 text-sm">
-          <option value="">全部可見性</option>
+          <option value="">All Visibility</option>
           <option value="public">Public</option>
           <option value="internal">Internal</option>
         </select>
         <input type="text" x-model="chunkSearch" @input.debounce.400ms="chunkPage = 0; loadChunks()"
           class="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="搜尋 ID / Title...">
+          placeholder="Search ID / Title...">
         <!-- Bulk action -->
         <div x-show="chunkSelected.length > 0" class="flex items-center gap-2 ml-auto">
-          <span class="text-xs text-gray-500" x-text="`已選 ${chunkSelected.length} 項`"></span>
+          <span class="text-xs text-gray-500" x-text="`${chunkSelected.length} selected`"></span>
           <button @click="bulkVisibility('public')" class="text-xs px-2 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50">Set Public</button>
           <button @click="bulkVisibility('internal')" class="text-xs px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50">Set Internal</button>
         </div>
@@ -273,10 +273,10 @@
             </template>
           </tbody>
         </table>
-        <div x-show="chunks.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <div x-show="chunks.length === 0" class="py-12 text-center text-gray-400 text-sm">No data</div>
         <!-- Pagination -->
         <div x-show="chunkTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
-          <span x-text="`顯示 ${chunkPage * chunkPageSize + 1}-${Math.min((chunkPage + 1) * chunkPageSize, chunkTotal)} / 共 ${chunkTotal}`"></span>
+          <span x-text="`Showing ${chunkPage * chunkPageSize + 1}-${Math.min((chunkPage + 1) * chunkPageSize, chunkTotal)} of ${chunkTotal}`"></span>
           <div class="flex items-center space-x-2">
             <select x-model.number="chunkPageSize" @change="chunkPage = 0; loadChunks()" class="border rounded px-2 py-1 text-xs">
               <option value="25">25</option>
@@ -285,10 +285,10 @@
             </select>
             <button @click="chunkPage = Math.max(0, chunkPage - 1); loadChunks()" :disabled="chunkPage === 0"
               :class="chunkPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">上一頁</button>
+              class="px-2 py-1 border rounded text-xs">Prev</button>
             <button @click="chunkPage++; loadChunks()" :disabled="(chunkPage + 1) * chunkPageSize >= chunkTotal"
               :class="(chunkPage + 1) * chunkPageSize >= chunkTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">下一頁</button>
+              class="px-2 py-1 border rounded text-xs">Next</button>
           </div>
         </div>
       </div>
@@ -423,7 +423,7 @@
                 </div>
               </div>
             </template>
-            <div x-show="overviewStats.clientBreakdown.length === 0" class="text-gray-400 text-xs">無資料</div>
+            <div x-show="overviewStats.clientBreakdown.length === 0" class="text-gray-400 text-xs">No data</div>
           </div>
         </div>
 
@@ -434,21 +434,21 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-sm bg-yellow-400"></span>
-                <span class="text-gray-600">未驗證</span>
+                <span class="text-gray-600">Unverified</span>
               </div>
               <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.learnedUnverified"></span>
             </div>
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-sm bg-green-400"></span>
-                <span class="text-gray-600">已驗證</span>
+                <span class="text-gray-600">Verified</span>
               </div>
               <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.learnedVerified"></span>
             </div>
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-sm bg-red-400"></span>
-                <span class="text-gray-600">已拒絕</span>
+                <span class="text-gray-600">Rejected</span>
               </div>
               <span class="font-semibold text-gray-800 tabular-nums" x-text="overviewStats.learnedRejected"></span>
             </div>
@@ -490,8 +490,8 @@
     <div x-show="activeTab === 'reports' && !loading && !error" x-cloak>
       <!-- Filter -->
       <div class="flex items-center space-x-2 mb-4">
-        <span class="text-sm text-gray-500">狀態：</span>
-        <template x-for="opt in [{v:'open',l:'開放'},{v:'closed',l:'已關閉'},{v:'all',l:'全部'}]" :key="opt.v">
+        <span class="text-sm text-gray-500">Status:</span>
+        <template x-for="opt in [{v:'open',l:'Open'},{v:'closed',l:'Closed'},{v:'all',l:'All'}]" :key="opt.v">
           <button @click="reportFilter = opt.v; loadReports()"
             :class="reportFilter === opt.v ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'"
             class="text-xs px-3 py-1.5 rounded-md transition" x-text="opt.l"></button>
@@ -502,12 +502,12 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">類型</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Type</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Detail</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-36">Query</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Chunk</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">狀態</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">時間</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Status</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Time</th>
               <th class="px-4 py-3 w-20"></th>
             </tr>
           </thead>
@@ -540,14 +540,14 @@
                   <button x-show="r.status === 'open'"
                     @click="closeReport(r.id)"
                     class="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded border hover:bg-gray-50 transition">
-                    關閉
+                    Close
                   </button>
                 </td>
               </tr>
             </template>
           </tbody>
         </table>
-        <div x-show="reports.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <div x-show="reports.length === 0" class="py-12 text-center text-gray-400 text-sm">No data</div>
       </div>
     </div>
 
@@ -555,8 +555,8 @@
     <div x-show="activeTab === 'learned' && !loading && !error" x-cloak>
       <!-- Filter -->
       <div class="flex items-center space-x-2 mb-4">
-        <span class="text-sm text-gray-500">篩選：</span>
-        <template x-for="opt in [{v:'unverified',l:'未驗證'},{v:'verified',l:'已驗證'},{v:'rejected',l:'已拒絕'},{v:'all',l:'全部'}]" :key="opt.v">
+        <span class="text-sm text-gray-500">Filter:</span>
+        <template x-for="opt in [{v:'unverified',l:'Unverified'},{v:'verified',l:'Verified'},{v:'rejected',l:'Rejected'},{v:'all',l:'All'}]" :key="opt.v">
           <button @click="learnedFilter = opt.v; learnedPage = 0; loadLearned()"
             :class="learnedFilter === opt.v ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'"
             class="text-xs px-3 py-1.5 rounded-md transition" x-text="opt.l"></button>
@@ -570,9 +570,9 @@
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-36">ID</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Tags</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">狀態</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Status</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Visibility</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">時間</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">Time</th>
               <th class="px-2 py-3 w-32"></th>
             </tr>
           </thead>
@@ -611,13 +611,13 @@
                       <button x-show="(c.status || (c.verified ? 'verified' : 'unverified')) !== 'verified'"
                         @click="verifyChunk(c.id)"
                         class="text-xs text-green-600 hover:text-green-800 px-1.5 py-1 rounded border border-green-200 hover:bg-green-50 transition"
-                        title="驗證通過">
+                        title="Verify">
                         ✓
                       </button>
                       <button x-show="(c.status || (c.verified ? 'verified' : 'unverified')) !== 'rejected'"
                         @click="rejectChunk(c.id)"
                         class="text-xs text-red-500 hover:text-red-700 px-1.5 py-1 rounded border border-red-200 hover:bg-red-50 transition"
-                        title="拒絕">
+                        title="Reject">
                         ✗
                       </button>
                     </div>
@@ -640,10 +640,10 @@
             </template>
           </tbody>
         </table>
-        <div x-show="learnedChunks.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <div x-show="learnedChunks.length === 0" class="py-12 text-center text-gray-400 text-sm">No data</div>
         <!-- Pagination -->
         <div x-show="learnedTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
-          <span x-text="`顯示 ${learnedPage * learnedPageSize + 1}-${Math.min((learnedPage + 1) * learnedPageSize, learnedTotal)} / 共 ${learnedTotal}`"></span>
+          <span x-text="`Showing ${learnedPage * learnedPageSize + 1}-${Math.min((learnedPage + 1) * learnedPageSize, learnedTotal)} of ${learnedTotal}`"></span>
           <div class="flex items-center space-x-2">
             <select x-model.number="learnedPageSize" @change="learnedPage = 0; loadLearned()" class="border rounded px-2 py-1 text-xs">
               <option value="25">25</option>
@@ -652,10 +652,10 @@
             </select>
             <button @click="learnedPage = Math.max(0, learnedPage - 1); loadLearned()" :disabled="learnedPage === 0"
               :class="learnedPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">上一頁</button>
+              class="px-2 py-1 border rounded text-xs">Prev</button>
             <button @click="learnedPage++; loadLearned()" :disabled="(learnedPage + 1) * learnedPageSize >= learnedTotal"
               :class="(learnedPage + 1) * learnedPageSize >= learnedTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">下一頁</button>
+              class="px-2 py-1 border rounded text-xs">Next</button>
           </div>
         </div>
       </div>
@@ -666,7 +666,7 @@
       <!-- Filter bar -->
       <div class="flex flex-wrap items-center gap-3 mb-4">
         <select x-model="auditActionFilter" @change="auditPage = 0; loadAuditLog()" class="border rounded-lg px-3 py-2 text-sm">
-          <option value="">全部 Action</option>
+          <option value="">All Actions</option>
           <option value="create">Create</option>
           <option value="verify">Verify</option>
           <option value="reject">Reject</option>
@@ -674,7 +674,7 @@
         </select>
         <input type="text" x-model="auditChunkIdFilter" @input.debounce.400ms="auditPage = 0; loadAuditLog()"
           class="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="搜尋 Chunk ID...">
+          placeholder="Search Chunk ID...">
       </div>
 
       <div class="bg-white rounded-lg border overflow-hidden">
@@ -706,10 +706,10 @@
             </template>
           </tbody>
         </table>
-        <div x-show="auditLog.length === 0" class="py-12 text-center text-gray-400 text-sm">無資料</div>
+        <div x-show="auditLog.length === 0" class="py-12 text-center text-gray-400 text-sm">No data</div>
         <!-- Pagination -->
         <div x-show="auditTotal > 0" class="border-t px-4 py-3 flex items-center justify-between text-sm text-gray-500">
-          <span x-text="`顯示 ${auditPage * auditPageSize + 1}-${Math.min((auditPage + 1) * auditPageSize, auditTotal)} / 共 ${auditTotal}`"></span>
+          <span x-text="`Showing ${auditPage * auditPageSize + 1}-${Math.min((auditPage + 1) * auditPageSize, auditTotal)} of ${auditTotal}`"></span>
           <div class="flex items-center space-x-2">
             <select x-model.number="auditPageSize" @change="auditPage = 0; loadAuditLog()" class="border rounded px-2 py-1 text-xs">
               <option value="25">25</option>
@@ -718,10 +718,10 @@
             </select>
             <button @click="auditPage = Math.max(0, auditPage - 1); loadAuditLog()" :disabled="auditPage === 0"
               :class="auditPage === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">上一頁</button>
+              class="px-2 py-1 border rounded text-xs">Prev</button>
             <button @click="auditPage++; loadAuditLog()" :disabled="(auditPage + 1) * auditPageSize >= auditTotal"
               :class="(auditPage + 1) * auditPageSize >= auditTotal ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
-              class="px-2 py-1 border rounded text-xs">下一頁</button>
+              class="px-2 py-1 border rounded text-xs">Next</button>
           </div>
         </div>
       </div>
@@ -733,24 +733,24 @@
       <!-- Key created result modal -->
       <div x-show="newKeyResult" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
         <div class="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
-          <h3 class="text-lg font-semibold text-gray-800 mb-3">API Key 已建立</h3>
+          <h3 class="text-lg font-semibold text-gray-800 mb-3">API Key Created</h3>
           <div class="mb-3">
             <label class="block text-xs text-gray-500 mb-1">Key</label>
             <div class="flex items-center space-x-2">
               <input type="text" readonly :value="newKeyResult?.key || ''" class="flex-1 border rounded-lg px-3 py-2 text-sm font-mono bg-gray-50" @click="$el.select()">
-              <button @click="navigator.clipboard.writeText(newKeyResult?.key || '')" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">複製</button>
+              <button @click="navigator.clipboard.writeText(newKeyResult?.key || '')" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">Copy</button>
             </div>
           </div>
-          <p class="text-sm text-orange-600 font-medium mb-4">此 Key 只會顯示一次，請立即複製保存</p>
+          <p class="text-sm text-orange-600 font-medium mb-4">This key will only be shown once. Copy it now.</p>
           <button @click="newKeyResult = null; showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '' }"
-            class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">關閉</button>
+            class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Close</button>
         </div>
       </div>
 
       <!-- Create key modal -->
       <div x-show="showCreateKey && !newKeyResult" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
         <div class="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
-          <h3 class="text-lg font-semibold text-gray-800 mb-4">建立新 API Key</h3>
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">Create New API Key</h3>
 
           <div class="mb-4">
             <label class="block text-xs font-medium text-gray-500 mb-1">Name</label>
@@ -819,17 +819,17 @@
           <div class="flex space-x-3">
             <button @click="createApiKey()" :disabled="!newKey.name || newKey.scopes.length === 0"
               :class="!newKey.name || newKey.scopes.length === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-indigo-700'"
-              class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm transition">建立</button>
+              class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm transition">Create</button>
             <button @click="showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '' }"
-              class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">取消</button>
+              class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Cancel</button>
           </div>
         </div>
       </div>
 
       <!-- Header -->
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-medium text-gray-500">管理 API Keys</h2>
-        <button @click="showCreateKey = true" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">建立新 Key</button>
+        <h2 class="text-sm font-medium text-gray-500">Manage API Keys</h2>
+        <button @click="showCreateKey = true" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">Create Key</button>
       </div>
 
       <!-- Keys table -->
@@ -873,7 +873,7 @@
             </template>
           </tbody>
         </table>
-        <div x-show="apiKeys.length === 0" class="py-12 text-center text-gray-400 text-sm">尚無 API Keys</div>
+        <div x-show="apiKeys.length === 0" class="py-12 text-center text-gray-400 text-sm">No API Keys yet</div>
       </div>
     </div>
 
@@ -955,7 +955,7 @@
             <!-- Deleted chunk -->
             <template x-if="detailData.deleted">
               <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 text-orange-700 text-sm">
-                此 Chunk 已被刪除或不存在。僅保留在 Audit Log 中作為歷史紀錄。
+                This chunk has been deleted or does not exist. Kept in Audit Log for historical reference.
               </div>
             </template>
             <template x-if="!detailData.deleted">
@@ -1008,10 +1008,10 @@
                 x-text="(detailData.chunk?.visibility || 'public') === 'public' ? 'Set Internal' : 'Set Public'"></button>
               <button x-show="detailData.chunk?.source === 'learned' && detailData.chunk?.status !== 'verified'"
                 @click="verifyChunk(detailData.chunk?.id); openChunkDetail(detailData.chunk?.id)"
-                class="text-xs text-green-600 px-3 py-1.5 rounded border border-green-200 hover:bg-green-50 transition">驗證</button>
+                class="text-xs text-green-600 px-3 py-1.5 rounded border border-green-200 hover:bg-green-50 transition">Verify</button>
               <button x-show="detailData.chunk?.source === 'learned' && detailData.chunk?.status !== 'rejected'"
                 @click="rejectChunk(detailData.chunk?.id); openChunkDetail(detailData.chunk?.id)"
-                class="text-xs text-red-500 px-3 py-1.5 rounded border border-red-200 hover:bg-red-50 transition">拒絕</button>
+                class="text-xs text-red-500 px-3 py-1.5 rounded border border-red-200 hover:bg-red-50 transition">Reject</button>
             </div>
 
             <!-- Related Reports -->
@@ -1075,7 +1075,7 @@
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
         </svg>
-        載入中...
+        Loading...
       </div>
     </div>
   </div>
@@ -1456,7 +1456,7 @@
         },
 
         async rejectChunk(id) {
-          if (!confirm(`確定要拒絕 ${id}？`)) return;
+          if (!confirm(`Reject ${id}?`)) return;
           await this.apiFetch(`/api/admin/learned/${id}/reject`, { method: 'POST' });
           await this.loadLearned();
         },
@@ -1488,7 +1488,7 @@
 
         async bulkVisibility(visibility) {
           if (this.chunkSelected.length === 0) return;
-          if (!confirm(`確定要將 ${this.chunkSelected.length} 項設為 ${visibility}？`)) return;
+          if (!confirm(`Set ${this.chunkSelected.length} items to ${visibility}?`)) return;
           await this.apiFetch('/api/admin/chunks/bulk-visibility', {
             method: 'POST',
             body: JSON.stringify({ ids: this.chunkSelected, visibility }),
@@ -1581,9 +1581,9 @@
         },
 
         statusLabel(status) {
-          if (status === 'verified') return '已驗證';
-          if (status === 'rejected') return '已拒絕';
-          return '未驗證';
+          if (status === 'verified') return 'Verified';
+          if (status === 'rejected') return 'Rejected';
+          return 'Unverified';
         },
 
         async loadApiKeys() {
@@ -1607,7 +1607,7 @@
         },
 
         async revokeApiKey(id) {
-          if (!confirm('確定要撤銷此 Key？')) return;
+          if (!confirm('Revoke this key?')) return;
           await this.apiFetch(`/api/admin/keys/${id}/revoke`, { method: 'POST' });
           await this.loadApiKeys();
         },
@@ -1667,11 +1667,11 @@
           if (!iso) return '—';
           const diff = Date.now() - new Date(iso).getTime();
           const m = Math.floor(diff / 60000);
-          if (m < 1) return '剛剛';
-          if (m < 60) return `${m} 分鐘前`;
+          if (m < 1) return 'just now';
+          if (m < 60) return `${m}m ago`;
           const h = Math.floor(m / 60);
-          if (h < 24) return `${h} 小時前`;
-          return `${Math.floor(h / 24)} 天前`;
+          if (h < 24) return `${h}h ago`;
+          return `${Math.floor(h / 24)}d ago`;
         },
       };
     }

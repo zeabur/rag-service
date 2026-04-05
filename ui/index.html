@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -66,18 +66,18 @@
                             <div class="flex items-center justify-between mb-2">
                                 <div class="flex items-center">
                                     <svg class="w-3 h-3 text-indigo-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">參考文獻 (RAG Sources)</p>
+                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sources</p>
                                 </div>
                                 <!-- Feedback Buttons -->
                                 <div class="flex items-center space-x-2" x-show="!msg.feedbackSent">
-                                    <button @click="sendFeedback(msg, 1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-green-600 transition" title="有幫助">
+                                    <button @click="sendFeedback(msg, 1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-green-600 transition" title="Helpful">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.708C19.921 10 21 11.071 21 12.389c0 .546-.188 1.054-.505 1.462l-2.43 3.125A3 3 0 0115.702 18H11v-8l3-4V4h-1v4l-3 4H4v6h4v2H4a2 2 0 01-2-2v-6a2 2 0 012-2h4l3-4V4a2 2 0 012-2h1a2 2 0 012 2v2.5l-3 4z"></path></svg>
                                     </button>
-                                    <button @click="sendFeedback(msg, -1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600 transition" title="沒幫助">
+                                    <button @click="sendFeedback(msg, -1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600 transition" title="Not helpful">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14H5.292C4.079 14 3 12.929 3 11.611c0-.546.188-1.054.505-1.462l2.43-3.125A3 3 0 018.298 6H13v8l-3 4v2h1v-4l3-4h4v-6h-4v-2h4a2 2 0 012 2v6a2 2 0 01-2 2h-4l-3 4v2a2 2 0 01-2 2h-1a2 2 0 01-2-2v-2.5l3-4z"></path></svg>
                                     </button>
                                 </div>
-                                <div x-show="msg.feedbackSent" class="text-[10px] text-green-600 font-bold italic" x-cloak>已收到回饋！</div>
+                                <div x-show="msg.feedbackSent" class="text-[10px] text-green-600 font-bold italic" x-cloak>Feedback received!</div>
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <template x-for="chunk in msg.chunks" :key="chunk.id">
@@ -92,7 +92,7 @@
                                            target="_blank"
                                            rel="noopener noreferrer"
                                            class="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-full border border-red-100 transition flex items-center">
-                                            回報
+                                            Report
                                         </a>
                                     </div>
                                 </template>
@@ -122,7 +122,7 @@
                     <div class="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     </div>
-                    <h2 class="text-lg font-bold text-white">設定</h2>
+                    <h2 class="text-lg font-bold text-white">Settings</h2>
                 </div>
                 <button @click="showSettingsModal = false" class="text-white/60 hover:text-white transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -135,11 +135,11 @@
                     <input type="password" x-model="apiKeyInput" @input="saveApiKey()"
                            class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none font-mono text-sm"
                            placeholder="rag_xxxxxxxxxxxxxxxx">
-                    <p x-show="settings.apiKey" x-cloak class="text-xs text-green-600 mt-1.5">✓ 已設定</p>
+                    <p x-show="settings.apiKey" x-cloak class="text-xs text-green-600 mt-1.5">✓ Connected</p>
                 </div>
                 <!-- Model -->
                 <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">模型</label>
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">Model</label>
                     <select x-model="settings.model" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
                         <optgroup label="Anthropic">
                             <option value="claude-opus-4-5">Claude Opus 4.5</option>
@@ -165,7 +165,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <div class="text-sm font-medium text-gray-800">Hybrid Search</div>
-                        <div class="text-xs text-gray-400 mt-0.5">BM25 + semantic 混合搜尋</div>
+                        <div class="text-xs text-gray-400 mt-0.5">BM25 + semantic hybrid search</div>
                     </div>
                     <button @click="settings.hybrid = !settings.hybrid"
                             class="relative w-11 h-6 rounded-full transition-colors"
@@ -178,10 +178,10 @@
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <div>
-                            <div class="text-sm font-medium text-gray-800">時間衰減</div>
-                            <div class="text-xs text-gray-400 mt-0.5">較小的數字會讓舊資料權重降得更快，0 = 關閉</div>
+                            <div class="text-sm font-medium text-gray-800">Temporal Decay</div>
+                            <div class="text-xs text-gray-400 mt-0.5">Smaller values decrease older content weight faster, 0 = off</div>
                         </div>
-                        <span class="text-sm font-mono text-indigo-600 font-bold" x-text="settings.decay === '0' || settings.decay === 0 ? '關閉' : settings.decay + 'd'"></span>
+                        <span class="text-sm font-mono text-indigo-600 font-bold" x-text="settings.decay === '0' || settings.decay === 0 ? 'off' : settings.decay + 'd'"></span>
                     </div>
                     <input type="range" min="0" max="730" step="30" x-model="settings.decay"
                            class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
@@ -189,8 +189,8 @@
                 <!-- Visibility -->
                 <div class="flex items-center justify-between">
                     <div>
-                        <div class="text-sm font-medium text-gray-800">內部搜尋</div>
-                        <div class="text-xs text-gray-400 mt-0.5">開啟後可搜尋內部知識（需要 read:internal 權限）</div>
+                        <div class="text-sm font-medium text-gray-800">Internal Search</div>
+                        <div class="text-xs text-gray-400 mt-0.5">Search internal knowledge (requires read:internal scope)</div>
                     </div>
                     <button @click="settings.visibility = settings.visibility === 'all' ? 'public' : 'all'"
                             class="relative w-11 h-6 rounded-full transition-colors"
@@ -201,7 +201,7 @@
                 </div>
                 <button @click="showSettingsModal = false"
                         class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition">
-                    完成
+                    Done
                 </button>
             </div>
         </div>
@@ -257,20 +257,20 @@
         <form @submit.prevent="sendMessage()" class="max-w-4xl mx-auto flex space-x-3 md:space-x-4">
             <input type="text" x-model="input" 
                    class="flex-1 border-gray-200 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm transition-all"
-                   placeholder="輸入你的問題..."
+                   placeholder="Ask a question..."
                    :disabled="loading"
                    autofocus>
             <button type="submit" 
                     class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md active:transform active:scale-95"
                     :disabled="loading || !input.trim()">
-                <span x-show="!loading">發送</span>
+                <span x-show="!loading">Send</span>
                 <svg x-show="loading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
             </button>
         </form>
-        <p class="text-center text-[10px] text-gray-400 mt-3 font-medium">AI 回答可能會出錯，請確認重要資訊。</p>
+        <p class="text-center text-[10px] text-gray-400 mt-3 font-medium">AI responses may be inaccurate. Please verify important information.</p>
     </footer>
 
     <script>
@@ -280,7 +280,7 @@
                 loading: false,
                 loadingStatus: '',
                 messages: [
-                    { role: 'assistant', content: '你好！我是知識庫助手。有什麼我可以幫你的嗎？' }
+                    { role: 'assistant', content: 'Hello! I'm your knowledge base assistant. How can I help you?' }
                 ],
                 settings: {
                     hybrid: true,
@@ -332,7 +332,7 @@
                     
                     this.input = '';
                     this.loading = true;
-                    this.loadingStatus = '正在搜尋知識庫...';
+                    this.loadingStatus = 'Searching knowledge base...';
 
                     this.scrollToBottom();
 
@@ -373,7 +373,7 @@
                                     const data = JSON.parse(line);
                                     if (data.type === 'chunks') {
                                         this.messages[assistantMsgIndex].chunks = data.chunks;
-                                        this.loadingStatus = '正在生成回答...';
+                                        this.loadingStatus = 'Generating answer...';
                                     } else if (data.type === 'text') {
                                         this.messages[assistantMsgIndex].content += data.text;
                                     } else if (data.type === 'error') {
@@ -387,8 +387,8 @@
                         }
                     } catch (err) {
                         this.messages[assistantMsgIndex].content = !this.settings.apiKey
-                            ? '請先點擊右上角「設定」按鈕設定 API Key。'
-                            : '系統發生錯誤，請稍後再試。';
+                            ? 'Please configure your API Key in Settings first.'
+                            : 'An error occurred. Please try again later.';
                     } finally {
                         this.loading = false;
                         this.scrollToBottom();
@@ -396,7 +396,7 @@
                 },
 
                 renderMarkdown(content) {
-                    if (!content) return '<span class="opacity-50 italic">AI 正在思考中...</span>';
+                    if (!content) return '<span class="opacity-50 italic">Thinking...</span>';
                     return DOMPurify.sanitize(marked.parse(content));
                 },
 
@@ -452,7 +452,7 @@
 
                 formatFullDate(dateStr) {
                     if (!dateStr) return 'Unknown Date';
-                    return new Date(dateStr).toLocaleString('zh-TW');
+                    return new Date(dateStr).toLocaleString('en-US');
                 }
             }
         }

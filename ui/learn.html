@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>貢獻新知識 — RAG Service</title>
+    <title>Contribute Knowledge — RAG Service</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>[x-cloak] { display: none !important; }</style>
@@ -13,8 +13,8 @@
     <!-- Header -->
     <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
         <div class="flex items-center space-x-2">
-            <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">Z</div>
-            <h1 class="text-lg font-semibold text-gray-800">貢獻新知識</h1>
+            <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
+            <h1 class="text-lg font-semibold text-gray-800">Contribute Knowledge</h1>
         </div>
         <div id="site-nav"></div>
     </header>
@@ -28,50 +28,50 @@
                 <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 </div>
-                <h2 class="text-lg font-bold text-green-800 mb-1">已新增知識</h2>
-                <p class="text-sm text-green-600 mb-3">知識已加入索引，可立即搜尋（分數 ×0.7 直到管理員 verify）。</p>
+                <h2 class="text-lg font-bold text-green-800 mb-1">Knowledge Added</h2>
+                <p class="text-sm text-green-600 mb-3">Knowledge indexed and searchable (score ×0.7 until admin verifies).</p>
                 <div class="flex items-center justify-center space-x-2 mb-6">
                     <span class="text-xs text-gray-500">ID:</span>
                     <code class="bg-white border border-green-200 text-green-800 font-mono text-sm px-3 py-1 rounded-lg cursor-pointer hover:bg-green-50 transition"
                           x-text="learnedId"
                           @click="copyId()"
-                          :title="copied ? '已複製！' : '點擊複製'">
+                          :title="copied ? 'Copied!' : 'Click to copy'">
                     </code>
-                    <span x-show="copied" x-cloak class="text-xs text-green-600 font-medium">已複製！</span>
+                    <span x-show="copied" x-cloak class="text-xs text-green-600 font-medium">Copied!</span>
                 </div>
                 <div class="flex justify-center space-x-3">
-                    <button @click="reset()" class="px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition">再新增一筆</button>
-                    <a href="/" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">回搜尋頁</a>
+                    <button @click="reset()" class="px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition">Add Another</button>
+                    <a href="/" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">Back to Search</a>
                 </div>
             </div>
 
             <!-- Form -->
             <div x-show="!learnedId">
-                <p class="text-sm text-gray-500 mb-6">貢獻經過驗證的知識，只填確定正確的內容。</p>
+                <p class="text-sm text-gray-500 mb-6">Contribute verified knowledge. Only submit information you know is correct.</p>
 
                 <form @submit.prevent="submit()" class="space-y-5">
 
                     <!-- Title -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">標題 <span class="text-red-400">*</span></label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Title <span class="text-red-400">*</span></label>
                         <input type="text" x-model="form.title" required
                                class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
-                               placeholder="簡短描述這段知識的主題">
+                               placeholder="Short description of this knowledge">
                     </div>
 
                     <!-- Content -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">內容 <span class="text-red-400">*</span> <span class="text-gray-400 font-normal">（支援 Markdown）</span></label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Content <span class="text-red-400">*</span> <span class="text-gray-400 font-normal">(Supports Markdown)</span></label>
                         <textarea x-model="form.content" required rows="8"
                                   class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-y"
-                                  placeholder="知識內容，支援 Markdown 格式…"></textarea>
+                                  placeholder="Knowledge content, supports Markdown..."></textarea>
                     </div>
 
                     <!-- Tags -->
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
                             Tags
-                            <span class="text-gray-400 font-normal ml-1">（選填，逗號分隔）</span>
+                            <span class="text-gray-400 font-normal ml-1">(Optional, comma-separated)</span>
                         </label>
                         <input type="text" x-model="form.tags"
                                class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
@@ -81,12 +81,12 @@
                     <!-- Source Query -->
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                            來源查詢
-                            <span class="text-gray-400 font-normal ml-1">（選填）</span>
+                            Source Query
+                            <span class="text-gray-400 font-normal ml-1">(Optional)</span>
                         </label>
                         <input type="text" x-model="form.source_query"
                                class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
-                               placeholder="讓這段知識被發現的原始用戶問題">
+                               placeholder="The original user question that prompted this knowledge">
                     </div>
 
                     <!-- API Key -->
@@ -103,8 +103,8 @@
                     <!-- Submit -->
                     <button type="submit" :disabled="submitting"
                             class="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">
-                        <span x-show="!submitting">提交知識</span>
-                        <span x-show="submitting" x-cloak>提交中...</span>
+                        <span x-show="!submitting">Submit</span>
+                        <span x-show="submitting" x-cloak>Submitting...</span>
                     </button>
                 </form>
             </div>
@@ -154,7 +154,7 @@
                         const data = await res.json();
                         this.learnedId = data.id;
                     } catch (err) {
-                        this.error = '提交失敗：' + err.message;
+                        this.error = 'Submission failed:' + err.message;
                     } finally {
                         this.submitting = false;
                     }
