@@ -138,5 +138,5 @@ spec:
             title: Username
             content: admin
           - type: TEXT
-            title: RAG_API_KEY
+            title: Password / RAG_API_KEY
             content: ${PASSWORD}
