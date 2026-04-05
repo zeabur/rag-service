@@ -2,22 +2,34 @@
 
 A self-hosted RAG service with hybrid search (semantic + BM25), admin dashboard, and Claude Code plugin for agent integration.
 
-## Quick Deploy
+## Getting Started
 
-### Prerequisites
+### 1. Create a Zeabur Project
 
-1. **InsForge** — Enable from your Zeabur project (**Integration → InsForge → Enable InsForge**). Additional charges may apply based on usage ([pricing details](https://zeabur.com/docs/en-US/integrations/insforge/overview)). Then find in InsForge **Project Settings → API**:
-   - Project URL (`INSFORGE_URL`): e.g. `https://xxx.us-east.insforge.app`
-   - API Key (`INSFORGE_API_KEY`): starts with `ik_...`
-   - Anon Key (`INSFORGE_KEY`): starts with `eyJ...`
+Go to [Zeabur Dashboard](https://dash.zeabur.com) and create a new project.
 
-2. **Zeabur AI Hub** — AI Hub API Key (`ZEABUR_AI_HUB_API_KEY`) can be generated during deployment, or created in advance at [zeabur.com/ai](https://zeabur.com/ai-hub)
+### 2. Enable InsForge
 
-### Deploy
+In your project, go to **Integration → InsForge → Enable InsForge**. Additional charges may apply based on usage ([pricing details](https://zeabur.com/docs/en-US/integrations/insforge/overview)).
+
+### 3. Get InsForge Credentials
+
+After enabling, open InsForge and go to **Project Settings → API** to find:
+
+- Project URL (`INSFORGE_URL`): e.g. `https://xxx.us-east.insforge.app`
+- API Key (`INSFORGE_API_KEY`): starts with `ik_...`
+- Anon Key (`INSFORGE_KEY`): starts with `eyJ...`
+
+### 4. Deploy RAG Service
+
+In your project, click **Add Service → Marketplace**, search for **RAG Service**, and fill in:
+
+- The three InsForge credentials from Step 3
+- Zeabur AI Hub API Key: can be generated during deployment, or created in advance at [Zeabur AI Hub](https://zeabur.com/ai-hub)
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/H126IM)
 
-Schema migrations run automatically on first startup.
+Schema migrations run automatically on first startup — no manual setup needed.
 
 ## API Endpoints
 

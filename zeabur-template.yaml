@@ -38,23 +38,32 @@ spec:
 
     A complete RAG service with admin dashboard for managing your knowledge base.
 
-    ## Prerequisites
+    ## Getting Started
 
-    You need to prepare the following before deploying:
+    ### Step 1: Create a Zeabur Project
 
-    ### 1. InsForge (Database)
+    Go to [Zeabur Dashboard](https://dash.zeabur.com) and create a new project.
 
-    Enable InsForge from your Zeabur project: **Integration → InsForge → Enable InsForge**. Additional charges may apply based on usage ([pricing details](https://zeabur.com/docs/en-US/integrations/insforge/overview)). After enabling, go to InsForge **Project Settings → API** to find:
+    ### Step 2: Enable InsForge
+
+    In your project, go to **Integration → InsForge → Enable InsForge**. Additional charges may apply based on usage ([pricing details](https://zeabur.com/docs/en-US/integrations/insforge/overview)).
+
+    ### Step 3: Get InsForge Credentials
+
+    After enabling, open InsForge and go to **Project Settings → API** to find:
 
     - **Project URL** (`INSFORGE_URL`): e.g. `https://xxx.us-east.insforge.app`
     - **API Key** (`INSFORGE_API_KEY`): starts with `ik_...`
     - **Anon Key** (`INSFORGE_KEY`): starts with `eyJ...`
 
-    ### 2. Zeabur AI Hub (LLM)
+    ### Step 4: Deploy RAG Service
 
-    - **AI Hub API Key** (`ZEABUR_AI_HUB_API_KEY`): can be generated during deployment, or created in advance at [Zeabur AI Hub](https://zeabur.com/ai-hub)
+    In your project, click **Add Service → Marketplace**, search for **RAG Service**, and fill in:
 
-    Schema migrations (tables, indexes, functions) run automatically on first startup — no manual setup needed.
+    - The three InsForge credentials from Step 3
+    - **Zeabur AI Hub API Key**: can be generated during deployment, or created in advance at [Zeabur AI Hub](https://zeabur.com/ai-hub)
+
+    Schema migrations run automatically on first startup — no manual setup needed.
 
     ## Features
 
