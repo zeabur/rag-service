@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://schema.zeabur.app/template.json
+# Template code: H126IM
+# Marketplace URL: https://zeabur.com/templates/H126IM
 apiVersion: zeabur.com/v1
 kind: Template
 metadata:
@@ -37,6 +39,8 @@ spec:
     # RAG Service
 
     A complete RAG service with admin dashboard for managing your knowledge base.
+
+    **Source code**: [github.com/zeabur/rag-service](https://github.com/zeabur/rag-service)
 
     ## Getting Started
 
