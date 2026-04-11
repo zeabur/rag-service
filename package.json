@@ -4,7 +4,8 @@
   "description": "RAG Service with hybrid search, API key management, and Claude Code plugin",
   "license": "MIT",
   "scripts": {
-    "start": "bun run src/server.ts"
+    "start": "bun run src/server.ts",
+    "pipeline": "bun run src/pipeline/runner.ts"
   },
   "dependencies": {
     "@insforge/sdk": "^1.1.5"

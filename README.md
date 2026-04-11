@@ -112,6 +112,65 @@ bun install
 bun run start
 ```
 
+## Pipeline
+
+Import data into the knowledge base using adapters.
+
+### Quick start
+
+```bash
+# Import from a JSON file
+bun run pipeline --adapter json --input data/my-chunks.json
+
+# Import from a directory of Markdown files
+bun run pipeline --adapter markdown --input ./docs/
+
+# List available adapters
+bun run pipeline --list
+```
+
+### CLI options
+
+| Option | Description |
+|--------|-------------|
+| `--adapter <name>` | Run specific adapter(s). Repeat for multiple. Omit for all. |
+| `--input <path>` | Set INPUT_PATH in adapter config. |
+| `--replace` | Delete all chunks before import (full rebuild). |
+| `--list` | List available adapters and exit. |
+| `--help` | Show help. |
+
+### Writing a custom adapter
+
+Create a `.ts` file that exports a `SourceAdapter`:
+
+```ts
+import type { SourceAdapter, Chunk } from "rag-service/pipeline/types";
+
+export default {
+  name: "my-source",
+  description: "Import from my custom source",
+
+  async export(config) {
+    // config contains all env vars + CLI --input as INPUT_PATH
+    const chunks: Chunk[] = [];
+    // ... fetch data, chunk it, push to chunks[] ...
+    return chunks;
+  },
+} satisfies SourceAdapter;
+```
+
+Load external adapters by setting `RAG_ADAPTERS_PATH`:
+
+```bash
+RAG_ADAPTERS_PATH=./my-adapters bun run pipeline
+```
+
+### Built-in adapters
+
+**json** — Import from a JSON file. Accepts `Chunk[]` or arrays of objects with `id` + `content` fields.
+
+**markdown** — Scan a directory for `.md`/`.mdx` files, parse frontmatter, split by `##` headings (~800 chars per chunk).
+
 ## License
 
 [MIT](LICENSE)
