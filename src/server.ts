@@ -118,7 +118,7 @@ function hasScope(auth: AuthResult, scope: string): boolean {
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": process.env.CORS_ORIGIN || "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
@@ -523,14 +523,23 @@ const server = serve({
     // Admin: Source stats (dynamic — queries distinct sources from DB)
     if (url.pathname === "/api/admin/source-stats" && req.method === "GET") {
       try {
-        const { data: sourceRows, error: srcErr } = await insforge.database
-          .from("poc_kb_chunks")
-          .select("source");
-        if (srcErr) throw srcErr;
+        // Paginate to avoid PostgREST default 1000-row limit
+        const PAGE_SIZE = 1000;
         const breakdown: Record<string, number> = {};
-        for (const row of (sourceRows || []) as any[]) {
-          const src = row.source || "unknown";
-          breakdown[src] = (breakdown[src] || 0) + 1;
+        let offset = 0;
+        while (true) {
+          const { data: rows, error: srcErr } = await insforge.database
+            .from("poc_kb_chunks")
+            .select("source")
+            .range(offset, offset + PAGE_SIZE - 1);
+          if (srcErr) throw srcErr;
+          if (!rows || rows.length === 0) break;
+          for (const row of rows as { source: string | null }[]) {
+            const src = row.source || "unknown";
+            breakdown[src] = (breakdown[src] || 0) + 1;
+          }
+          if (rows.length < PAGE_SIZE) break;
+          offset += PAGE_SIZE;
         }
         const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
         return jsonResponse({ total, breakdown });
@@ -615,6 +624,140 @@ const server = serve({
         writeAudit({ chunk_id: id, action: "reject", old_value: oldData, new_value: { status: "rejected" } });
         clearBM25Cache();
         return jsonResponse({ success: true });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
+    // Admin: Triage — aggregated "what needs attention"
+    if (url.pathname === "/api/admin/triage" && req.method === "GET") {
+      try {
+        const days = Number(url.searchParams.get("days") || 14);
+        const similarityThreshold = Number(url.searchParams.get("similarity_threshold") || 0.4);
+        const limit = Number(url.searchParams.get("limit") || 20);
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+        const [reportsResult, learnedResult, lowSimResult, negFeedbackResult] = await Promise.all([
+          // 1. Open reports (no time window)
+          (async () => {
+            const { data, error, count } = await insforge.database
+              .from("rag_reports")
+              .select("id, type, chunk_id, query, detail, created_at", { count: "exact" })
+              .eq("status", "open")
+              .order("created_at", { ascending: false })
+              .limit(limit);
+            return { data: data || [], error, count: count || 0 };
+          })(),
+
+          // 2. Unverified learned (no time window)
+          (async () => {
+            const { data, error, count } = await insforge.database
+              .from("poc_kb_chunks")
+              .select("id, title, tags, created_at", { count: "exact" })
+              .eq("source", "learned")
+              .eq("status", "unverified")
+              .order("created_at", { ascending: false })
+              .limit(limit);
+            const now = Date.now();
+            const withAge = (data || []).map((row: any) => ({
+              ...row,
+              age_days: row.created_at
+                ? Math.floor((now - new Date(row.created_at).getTime()) / (24 * 60 * 60 * 1000))
+                : null,
+            }));
+            return { data: withAge, error, count: count || 0 };
+          })(),
+
+          // 3. Low-similarity signals (time-windowed, dedup by query in app)
+          (async () => {
+            const { data, error, count } = await insforge.database
+              .from("rag_query_signals")
+              .select("id, query, top_similarity, top_chunk_ids, client, created_at", { count: "exact" })
+              .gte("created_at", since)
+              .lt("top_similarity", similarityThreshold)
+              .not("top_similarity", "is", null)
+              .order("created_at", { ascending: false });
+            // Dedup by query: keep most recent (already sorted by created_at desc)
+            const seen = new Set<string>();
+            const deduped: any[] = [];
+            for (const row of (data || []) as any[]) {
+              const q = (row.query || "").toLowerCase().trim();
+              if (seen.has(q)) continue;
+              seen.add(q);
+              deduped.push(row);
+            }
+            return { data: deduped.slice(0, limit), error, count: deduped.length };
+          })(),
+
+          // 4. Negative feedback signals (time-windowed)
+          (async () => {
+            const { data, error, count } = await insforge.database
+              .from("rag_query_signals")
+              .select("id, query, feedback_score, feedback_comment, top_chunk_ids, created_at", { count: "exact" })
+              .gte("created_at", since)
+              .lt("feedback_score", 0)
+              .order("created_at", { ascending: false })
+              .limit(limit);
+            return { data: data || [], error, count: count || 0 };
+          })(),
+        ]);
+
+        // Build response with partial error support
+        const response: Record<string, any> = {
+          generated_at: new Date().toISOString(),
+          window_days: days,
+          similarity_threshold: similarityThreshold,
+          counts: {
+            open_reports: 0,
+            unverified_learned: 0,
+            low_similarity_signals: 0,
+            negative_feedback_signals: 0,
+          },
+          has_more: {
+            open_reports: false,
+            unverified_learned: false,
+            low_similarity_signals: false,
+            negative_feedback_signals: false,
+          },
+        };
+
+        if (reportsResult.error) {
+          response.open_reports_error = reportsResult.error.message;
+          response.open_reports = [];
+        } else {
+          response.open_reports = reportsResult.data;
+          response.counts.open_reports = reportsResult.count;
+          response.has_more.open_reports = reportsResult.count > limit;
+        }
+
+        if (learnedResult.error) {
+          response.unverified_learned_error = learnedResult.error.message;
+          response.unverified_learned = [];
+        } else {
+          response.unverified_learned = learnedResult.data;
+          response.counts.unverified_learned = learnedResult.count;
+          response.has_more.unverified_learned = learnedResult.count > limit;
+        }
+
+        if (lowSimResult.error) {
+          response.low_similarity_signals_error = lowSimResult.error.message;
+          response.low_similarity_signals = [];
+        } else {
+          response.low_similarity_signals = lowSimResult.data;
+          response.counts.low_similarity_signals = lowSimResult.count;
+          response.has_more.low_similarity_signals = lowSimResult.count > limit;
+        }
+
+        if (negFeedbackResult.error) {
+          response.negative_feedback_signals_error = negFeedbackResult.error.message;
+          response.negative_feedback_signals = [];
+        } else {
+          response.negative_feedback_signals = negFeedbackResult.data;
+          response.counts.negative_feedback_signals = negFeedbackResult.count;
+          response.has_more.negative_feedback_signals = negFeedbackResult.count > limit;
+        }
+
+        return jsonResponse(response);
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
@@ -740,6 +883,82 @@ const server = serve({
       }
     }
 
+    // Admin: Update chunk content (any subset of editable fields)
+    // PATCH body: { title?, question?, answer?, tags?, url?, text_content?, visibility?, status? }
+    // If text_content is provided, the embedding is recomputed.
+    const patchChunkMatch = url.pathname.match(/^\/api\/admin\/chunks\/([^/]+)$/);
+    if (patchChunkMatch && req.method === "PATCH") {
+      try {
+        const id = decodeURIComponent(patchChunkMatch[1]);
+        const body = await req.json();
+
+        const editable = ["title", "question", "answer", "tags", "url", "text_content", "visibility", "status"] as const;
+        const updates: Record<string, any> = {};
+        for (const key of editable) {
+          if (key in body) updates[key] = body[key];
+        }
+        if (Object.keys(updates).length === 0) {
+          return jsonResponse({ error: "No editable fields provided" }, 400);
+        }
+        if (updates.visibility && updates.visibility !== "public" && updates.visibility !== "internal") {
+          return jsonResponse({ error: "visibility must be 'public' or 'internal'" }, 400);
+        }
+        if (updates.status && !["unverified", "verified", "rejected"].includes(updates.status)) {
+          return jsonResponse({ error: "status must be 'unverified' | 'verified' | 'rejected'" }, 400);
+        }
+        if (updates.tags && !Array.isArray(updates.tags)) {
+          return jsonResponse({ error: "tags must be an array" }, 400);
+        }
+        // If any content field changes, text_content must also be provided so the embedding stays in sync.
+        const contentFields = ["title", "question", "answer"] as const;
+        const contentChanged = contentFields.some(f => f in updates);
+        if (contentChanged && !("text_content" in updates)) {
+          return jsonResponse({
+            error: "text_content is required when updating title/question/answer (embedding must stay in sync)",
+          }, 400);
+        }
+
+        // Fetch old row for audit + existence check
+        const { data: oldRow, error: fetchErr } = await insforge.database
+          .from("poc_kb_chunks")
+          .select("id, title, question, answer, tags, url, text_content, visibility, status")
+          .eq("id", id)
+          .single();
+        if (fetchErr || !oldRow) return jsonResponse({ error: "Chunk not found" }, 404);
+
+        // Re-embed if text_content changed
+        let embeddingUpdated = false;
+        if ("text_content" in updates && updates.text_content !== (oldRow as any).text_content) {
+          const [embedding] = await embedTexts([updates.text_content]);
+          (updates as any).embedding = JSON.stringify(embedding);
+          embeddingUpdated = true;
+        }
+
+        const { error: updateErr } = await insforge.database
+          .from("poc_kb_chunks")
+          .update(updates)
+          .eq("id", id);
+        if (updateErr) return jsonResponse({ error: updateErr.message }, 500);
+
+        // Audit: log only the fields that actually changed (omit embedding blob)
+        const oldDiff: Record<string, any> = {};
+        const newDiff: Record<string, any> = {};
+        for (const key of editable) {
+          if (key in updates && JSON.stringify((oldRow as any)[key]) !== JSON.stringify(updates[key])) {
+            oldDiff[key] = (oldRow as any)[key];
+            newDiff[key] = updates[key];
+          }
+        }
+        if (embeddingUpdated) newDiff.embedding = "<re-embedded>";
+        writeAudit({ chunk_id: id, action: "edit", old_value: oldDiff, new_value: newDiff });
+
+        clearBM25Cache();
+        return jsonResponse({ success: true, id, updated_fields: Object.keys(newDiff), embedding_updated: embeddingUpdated });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
     // Admin: Update chunk visibility
     const visibilityMatch = url.pathname.match(/^\/api\/admin\/chunks\/([^/]+)\/visibility$/);
     if (visibilityMatch && req.method === "POST") {
@@ -822,21 +1041,28 @@ const server = serve({
           (async () => {
             const { count: totalQueries } = await insforge.database
               .from("rag_query_signals").select("*", { count: "exact", head: true });
-            const { data: fbData } = await insforge.database
-              .from("rag_query_signals").select("feedback_score").not("feedback_score", "is", null);
-            const pos = (fbData || []).filter((r: any) => r.feedback_score === 1).length;
-            const neg = (fbData || []).filter((r: any) => r.feedback_score === -1).length;
-            const { data: simData } = await insforge.database
-              .from("rag_query_signals").select("top_similarity").not("top_similarity", "is", null).limit(5000);
-            const sims = (simData || []).map((r: any) => r.top_similarity).filter((s: number) => s != null);
-            const avgSim = sims.length ? sims.reduce((a: number, b: number) => a + b, 0) / sims.length : 0;
-            const { data: clientData } = await insforge.database
-              .from("rag_query_signals").select("client");
+            // Paginate feedback + similarity + client data to avoid 1000-row cap
+            const PAGE_SIZE = 1000;
+            let pos = 0, neg = 0, simSum = 0, simCount = 0;
             const clientCounts: Record<string, number> = {};
-            for (const r of (clientData || []) as any[]) {
-              const c = r.client || "api";
-              clientCounts[c] = (clientCounts[c] || 0) + 1;
+            let offset = 0;
+            while (true) {
+              const { data, error } = await insforge.database
+                .from("rag_query_signals")
+                .select("feedback_score, top_similarity, client")
+                .range(offset, offset + PAGE_SIZE - 1);
+              if (error || !data || data.length === 0) break;
+              for (const r of data as { feedback_score: number | null; top_similarity: number | null; client: string | null }[]) {
+                if (r.feedback_score === 1) pos++;
+                else if (r.feedback_score === -1) neg++;
+                if (r.top_similarity != null) { simSum += r.top_similarity; simCount++; }
+                const c = r.client || "api";
+                clientCounts[c] = (clientCounts[c] || 0) + 1;
+              }
+              if (data.length < PAGE_SIZE) break;
+              offset += PAGE_SIZE;
             }
+            const avgSim = simCount ? simSum / simCount : 0;
             const clientBreakdown = Object.entries(clientCounts)
               .map(([name, count]) => ({ name, count }))
               .sort((a, b) => b.count - a.count);
