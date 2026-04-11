@@ -1,6 +1,6 @@
 ---
 name: zeabur-rag-learn
-description: Contribute new verified knowledge to the RAG knowledge base. Use when you've learned something concrete and useful from solving a problem, debugging an issue, or discovering undocumented behavior — and the information isn't already in the knowledge base. Only contribute verified facts, not guesses or workarounds.
+description: Contribute new verified knowledge to the RAG knowledge base. Use after you've solved a concrete problem, debugged a non-obvious issue, or discovered undocumented behavior that would help future agents — but only after calling zeabur-rag-search first to confirm the knowledge isn't already covered. Only contribute verified facts, not guesses or workarounds. The new chunk is marked unverified until an admin reviews it.
 ---
 
 # RAG Learn

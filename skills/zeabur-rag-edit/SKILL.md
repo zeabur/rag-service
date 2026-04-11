@@ -1,9 +1,9 @@
 ---
 name: zeabur-rag-edit
-description: Edit the content of an existing chunk in the Zeabur RAG knowledge base. Use when a chunk has a typo, outdated info, wrong tags, wrong visibility, or needs its title/question/answer rewritten — and you want the fix to take effect immediately. Requires admin scope. Prefer zeabur-rag-report for surfacing issues without write access.
+description: Edit the content of an existing chunk in the RAG knowledge base. Use when a chunk has a typo, outdated info, wrong tags, wrong visibility, or needs its title/question/answer rewritten — and you want the fix to take effect immediately. Requires admin scope. Prefer zeabur-rag-report for surfacing issues without write access.
 ---
 
-# Zeabur RAG — Edit
+# RAG — Edit
 
 Update the content of an existing chunk in place. Embedding is recomputed automatically when the searchable text changes, and the BM25 cache is cleared so the change is live on the next query.
 
@@ -29,9 +29,9 @@ curl -s -X PATCH "$ZEABUR_RAG_URL/api/admin/chunks/<chunk_id>" \
   -H "Authorization: Bearer $RAG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "新標題",
-    "answer": "修正後的內容",
-    "text_content": "新標題\n修正後的內容"
+    "title": "Updated title",
+    "answer": "Corrected content",
+    "text_content": "Updated title\nCorrected content"
   }'
 ```
 

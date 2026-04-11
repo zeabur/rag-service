@@ -81,12 +81,40 @@ This sets `ZEABUR_RAG_URL` and `RAG_API_KEY` in your Claude Code settings. The a
 
 ### Available Skills
 
-| Skill | Description |
-|-------|-------------|
-| `zeabur-rag-search` | Search knowledge base with hybrid retrieval |
-| `zeabur-rag-learn` | Contribute new verified knowledge |
-| `zeabur-rag-report` | Report outdated, incorrect, or missing content |
-| `zeabur-rag-setup` | Configure plugin environment variables |
+The plugin ships 8 skills split into two tiers: everyday use, and maintenance of the knowledge base itself.
+
+**Using the knowledge base** — any agent with an API key can invoke these:
+
+| Skill | When it triggers |
+|-------|------------------|
+| `zeabur-rag-setup` | First-time setup — asks for `ZEABUR_RAG_URL` and `RAG_API_KEY`, writes them to Claude Code settings |
+| `zeabur-rag-search` | Any technical question that might be answered by the KB (fires automatically, even without an explicit "search" instruction) |
+| `zeabur-rag-learn` | After solving a problem or discovering something the KB didn't cover — contributes a new chunk marked `unverified` until an admin reviews it |
+| `zeabur-rag-report` | A search result looks wrong, outdated, or a topic is missing — files an issue against a chunk without needing write access |
+
+**Curating the knowledge base** — admin-scope skills that form a self-improving loop:
+
+| Skill | Role in the loop |
+|-------|------------------|
+| `zeabur-rag-triage` | Lists everything pending: open reports, unverified `learn` chunks, low-similarity queries, negative feedback |
+| `zeabur-rag-inspect` | Pulls one chunk's full content + related reports + search signals + edit history — the "look before you touch" step |
+| `zeabur-rag-edit` | Patches an existing chunk in place (title, content, tags, visibility). Requires admin scope |
+| `zeabur-rag-curate` | Orchestrator — walks through every triage item one by one with the user, deciding fix / reject / learn-new for each |
+
+### The Curation Loop
+
+Every agent interaction feeds a signal back into the KB, and the curation skills close the loop:
+
+1. **Agents run `search`** → every query is logged with its top similarity score. Low-similarity queries (< 0.4) become signals that the KB may have a gap.
+2. **Agents run `learn` / `report`** → new unverified chunks and open reports pile up in a queue.
+3. **An admin runs `curate`** (or `triage` for a quick read-only view) → the skill walks the queue item-by-item:
+   - For a **report**: `inspect` the chunk → `edit` to fix, or `learn` new content if it's a gap → close the report.
+   - For an **unverified `learn` chunk**: `inspect` → verify, reject, or edit before verifying.
+   - For a **low-similarity query**: `search` to reproduce → `learn` new content if it's a true gap, or `edit` an existing chunk to rank better.
+   - For **negative feedback**: `inspect` the returned chunks → fix whichever one misled the agent.
+4. **Verified chunks rank at full weight**; rejected ones are removed. The next round of searches sees an improved KB.
+
+Agents and admins operate on the same data — the skills just expose different capabilities depending on scope. Point the plugin at any RAG service deployment and the loop works out of the box.
 
 ## Environment Variables
 

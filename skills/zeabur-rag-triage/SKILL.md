@@ -1,9 +1,9 @@
 ---
 name: zeabur-rag-triage
-description: List pending knowledge base maintenance items — open reports, unverified learned chunks, low-similarity queries, and negative feedback. Use when checking KB health, reviewing the queue, or starting a curation session. Triggers on "review queue", "知識庫待辦", "what needs attention", "最近搜不到的查詢", "未驗證的 chunks".
+description: List pending knowledge base maintenance items — open reports, unverified learned chunks, low-similarity queries, and negative feedback. Use when checking KB health, reviewing the maintenance queue, or starting a curation session. Triggers on "review queue", "what needs attention in the KB", "pending reports", "unverified chunks", "failed queries", "KB health check". Requires admin scope.
 ---
 
-# Zeabur RAG — Triage
+# RAG — Triage
 
 Show what needs attention in the knowledge base. Returns 4 categories of pending items in a single call.
 
@@ -43,4 +43,4 @@ If a category query fails, its array is empty and a `<category>_error` field app
 ## When all categories are empty
 
 If every count is 0, the knowledge base has no pending maintenance. Report:
-"知識庫目前沒有待辦事項，看起來健康 ✅"
+"The knowledge base has no pending items — looks healthy ✅"

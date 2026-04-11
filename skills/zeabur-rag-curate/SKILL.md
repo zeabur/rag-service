@@ -1,9 +1,9 @@
 ---
 name: zeabur-rag-curate
-description: Interactive knowledge base curation loop — reviews pending items (reports, unverified chunks, failed queries, negative feedback) and walks through fixes one by one. Use when asked to "整理知識庫", "處理 reports", "review knowledge base", "跑一輪知識庫維運", or any request to maintain KB quality. This is the main entry point for the expand → organize → reflect cycle.
+description: Interactive knowledge base curation loop — reviews pending items (reports, unverified chunks, failed queries, negative feedback) and walks through fixes one by one. Use when asked to "maintain the knowledge base", "review pending items", "run a curation round", "process reports", "clean up the KB", or any request to improve KB quality. This is the main entry point for the expand → organize → reflect cycle, and requires admin scope.
 ---
 
-# Zeabur RAG — Curate
+# RAG — Curate
 
 Interactive curation loop for the knowledge base. This skill orchestrates other skills (`triage`, `inspect`, `edit`, `learn`, `search`) plus a few inline admin API calls to walk the user through fixing pending issues one by one.
 
@@ -16,10 +16,10 @@ Auth: `Authorization: Bearer $RAG_API_KEY` — **admin scope required**
 
 1. **Call `zeabur-rag-triage`** to get the pending items list.
 2. **Present results** as a numbered list grouped by category (🔴 Reports, 🟡 Unverified, 🟠 Low-similarity, 🔵 Negative feedback). Show counts.
-3. **If all categories are empty:** say "知識庫目前沒有待辦事項，看起來健康 ✅" and stop.
+3. **If all categories are empty:** tell the user "The knowledge base has no pending items — looks healthy ✅" and stop.
 4. **Wait for user** to pick an item by number or description.
 5. **Run the decision tree** for that item type (see below).
-6. **After each action**, echo the result and ask "下一個？" to return to the list.
+6. **After each action**, echo the result and ask "Next?" to return to the list.
 7. **User says stop** → end the loop.
 
 ## Decision trees
@@ -86,7 +86,7 @@ curl -s -X POST "$ZEABUR_RAG_URL/api/admin/learned/<id>/verify" \
   -H "Authorization: Bearer $RAG_API_KEY"
 ```
 
-Returns `{"success": true}`. The chunk now gets full search weight (no longer ×0.7).
+Returns `{"success": true}`. The chunk now ranks at full weight in search (unverified `learned` chunks are downranked to ×0.7 similarity).
 
 ### Reject a learned chunk (soft delete)
 
@@ -119,7 +119,7 @@ Returns `{"success": true}`. Closing an already-closed report is treated as succ
 
 ## Rules
 
-- **Never auto-execute mutations.** Every edit, verify, reject, learn, or close requires the user to explicitly confirm (e.g. "好", "verify", "reject", "close").
+- **Never auto-execute mutations.** Every edit, verify, reject, learn, or close requires the user to explicitly confirm (e.g. "ok", "verify", "reject", "close").
 - **Always inspect before edit.** You need the existing `text_content` to construct a new one. The edit endpoint returns 400 if you change `title`/`question`/`answer` without providing `text_content`.
 - **Echo results after every action.** Show the audit_id, new status, or error message so the user knows what happened.
 - **Don't retry failed mutations.** Surface the error and let the user decide.

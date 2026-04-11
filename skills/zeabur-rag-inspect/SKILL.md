@@ -1,9 +1,9 @@
 ---
 name: zeabur-rag-inspect
-description: View a single chunk's full content plus related reports, search signals, and edit history. Use when you need to understand a chunk's context before editing, when investigating why a search result appeared, or when reviewing a reported issue. Triggers on "看一下 SUP-1234", "inspect chunk", "chunk 的歷史", "為什麼這個結果出現".
+description: View a single chunk's full content plus related reports, search signals, and edit history. Use when you need to understand a chunk's context before editing, when investigating why a search result appeared, or when reviewing a reported issue. Triggers on "inspect chunk SUP-1234", "show chunk DOC-xxx", "chunk history", "why did this result appear", "look at this chunk". Requires admin scope.
 ---
 
-# Zeabur RAG — Inspect
+# RAG — Inspect
 
 Get the full picture of a single knowledge base chunk: its content, related reports, search signals that surfaced it, and audit history.
 
