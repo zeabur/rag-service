@@ -5,7 +5,7 @@ import { loadBM25Index, type BM25Index } from "./bm25";
 // Existing database client
 export const insforge = createClient({
   baseUrl: process.env.INSFORGE_URL!,
-  anonKey: process.env.INSFORGE_KEY!,
+  anonKey: process.env.INSFORGE_API_KEY!,
 });
 
 export interface MatchedChunk {
@@ -262,7 +262,7 @@ export function printRetrievalResults(chunks: MatchedChunk[], query: string, top
 }
 
 const RAG_LLM_URL = process.env.LLM_API_URL || process.env.ZEABUR_AI_HUB_URL || "https://api.openai.com/v1";
-const RAG_LLM_KEY = process.env.LLM_API_KEY || process.env.ZEABUR_AI_HUB_API_KEY || process.env.INSFORGE_KEY!;
+const RAG_LLM_KEY = process.env.LLM_API_KEY || process.env.ZEABUR_AI_HUB_API_KEY || process.env.INSFORGE_API_KEY!;
 const RAG_DEFAULT_MODEL = process.env.RAG_MODEL || "gemini-2.5-flash-lite";
 
 const RAG_SYSTEM_PROMPT_PREFIX = `你是技術支援助手。根據以下知識庫內容回答用戶問題。

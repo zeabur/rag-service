@@ -146,7 +146,7 @@ Options:
 Environment:
   RAG_ADAPTERS_PATH   Directory of external adapter .ts/.js files to load.
   INSFORGE_URL        InsForge backend URL (required unless --dry-run).
-  INSFORGE_KEY        InsForge anon key (required unless --dry-run).
+  INSFORGE_API_KEY    InsForge API key (required unless --dry-run).
 `;
 
 // --- Main ---

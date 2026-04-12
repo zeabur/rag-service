@@ -82,13 +82,12 @@ After enabling, open InsForge and go to **Project Settings → API** to find:
 
 - Project URL (`INSFORGE_URL`): e.g. `https://xxx.us-east.insforge.app`
 - API Key (`INSFORGE_API_KEY`): starts with `ik_...`
-- Anon Key (`INSFORGE_KEY`): starts with `eyJ...`
 
 ### 4. Deploy RAG Service
 
 In your project, click **Add Service → Marketplace**, search for **RAG Service**, and fill in:
 
-- The three InsForge credentials from Step 3
+- The InsForge credentials from Step 3
 - Zeabur AI Hub API Key: can be generated during deployment, or created in advance at [Zeabur AI Hub](https://zeabur.com/ai-hub)
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/H126IM)
@@ -185,8 +184,7 @@ Agents and admins operate on the same data — the skills just expose different 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `INSFORGE_URL` | Yes | InsForge backend URL |
-| `INSFORGE_KEY` | Yes | InsForge anon key |
-| `INSFORGE_API_KEY` | Yes | InsForge API key for schema migration |
+| `INSFORGE_API_KEY` | Yes | InsForge API key (`ik_...`) |
 | `ZEABUR_AI_HUB_API_KEY` | Yes | [Zeabur AI Hub](https://zeabur.com/ai-hub) key for LLM inference |
 | `RAG_API_KEY` | Auto | API key for service access (auto-generated on Zeabur) |
 | `RAG_BASIC_AUTH` | Auto | Dashboard auth (format: `admin:password`) |
@@ -197,7 +195,7 @@ See `.env.example` for a complete template.
 
 ## Embedding Model
 
-All vector embeddings use **`openai/text-embedding-3-small`** (1536 dimensions) via the InsForge AI proxy. No separate OpenAI API key is needed — the InsForge credentials (`INSFORGE_URL` / `INSFORGE_KEY`) handle both database and embedding requests.
+All vector embeddings use **`openai/text-embedding-3-small`** (1536 dimensions) via the InsForge AI proxy. No separate OpenAI API key is needed — the InsForge credentials (`INSFORGE_URL` / `INSFORGE_API_KEY`) handle both database and embedding requests.
 
 This model is used for:
 - **Query-time embedding** — vectorizing search queries (`src/query.ts`)
