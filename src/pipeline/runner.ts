@@ -16,7 +16,7 @@ const QUERY_PAGE_SIZE = 1000;
 async function getExistingChunkHashes(): Promise<Map<string, string>> {
   const { data, error } = await insforge.database
     .from("poc_kb_chunks")
-    .select("id,title,question,answer,text_content,tags,source,parent_id,created_at,url");
+    .select("id,title,question,answer,text_content,tags,source,parent_id,created_at,url,visibility");
   if (error) {
     console.error("Error fetching existing chunks:", error);
     return new Map();
@@ -101,6 +101,8 @@ async function uploadBatch(chunks: Chunk[], embeddings: number[][]): Promise<voi
     parent_id: chunk.metadata.parent_id,
     created_at: chunk.metadata.created_at || null,
     url: chunk.metadata.url || null,
+    visibility: chunk.metadata.visibility ?? "public",
+    status: "verified",
     embedding: JSON.stringify(embeddings[i]),
   }));
   const { error } = await insforge.database.from("poc_kb_chunks").insert(rows);
@@ -109,11 +111,12 @@ async function uploadBatch(chunks: Chunk[], embeddings: number[][]): Promise<voi
 
 // --- CLI parsing ---
 
-function parseCliArgs(): { adapterNames: string[]; inputPath: string | null; replace: boolean; listMode: boolean; help: boolean } {
+function parseCliArgs(): { adapterNames: string[]; inputPath: string | null; replace: boolean; dryRun: boolean; listMode: boolean; help: boolean } {
   const args = process.argv.slice(2);
   const adapterNames: string[] = [];
   let inputPath: string | null = null;
   let replace = false;
+  let dryRun = false;
   let listMode = false;
   let help = false;
 
@@ -122,11 +125,12 @@ function parseCliArgs(): { adapterNames: string[]; inputPath: string | null; rep
       case "--adapter": adapterNames.push(args[++i]); break;
       case "--input": inputPath = args[++i]; break;
       case "--replace": replace = true; break;
+      case "--dry-run": dryRun = true; break;
       case "--list": listMode = true; break;
       case "--help": help = true; break;
     }
   }
-  return { adapterNames, inputPath, replace, listMode, help };
+  return { adapterNames, inputPath, replace, dryRun, listMode, help };
 }
 
 const HELP_TEXT = `Usage: bun run src/pipeline/runner.ts [options]
@@ -135,19 +139,20 @@ Options:
   --adapter <name>    Run specific adapter(s). Repeat for multiple. Omit for all.
   --input <path>      Set INPUT_PATH in adapter config.
   --replace           Delete all chunks before import (full rebuild).
+  --dry-run           Export chunks and print as JSON to stdout; skip embed/upload/afterUpload.
   --list              List available adapters and exit.
   --help              Show this help.
 
 Environment:
   RAG_ADAPTERS_PATH   Directory of external adapter .ts/.js files to load.
-  INSFORGE_URL        InsForge backend URL (required).
-  INSFORGE_KEY        InsForge anon key (required).
+  INSFORGE_URL        InsForge backend URL (required unless --dry-run).
+  INSFORGE_KEY        InsForge anon key (required unless --dry-run).
 `;
 
 // --- Main ---
 
 async function main() {
-  const { adapterNames, inputPath, replace, listMode, help } = parseCliArgs();
+  const { adapterNames, inputPath, replace, dryRun, listMode, help } = parseCliArgs();
 
   if (help) { console.error(HELP_TEXT); return; }
 
@@ -189,6 +194,7 @@ async function main() {
     if (v !== undefined) config[k] = v;
   }
   if (inputPath) config.INPUT_PATH = inputPath;
+  if (dryRun) config.DRY_RUN = "1";
 
   // Run adapters
   console.error(`\nRunning ${selectedAdapters.length} adapter(s)...`);
@@ -217,6 +223,13 @@ async function main() {
   for (const chunk of allChunks) deduped.set(chunk.id, chunk);
   allChunks = Array.from(deduped.values());
   console.error(`\nTotal: ${allChunks.length} unique chunk(s) after dedup`);
+
+  if (dryRun) {
+    console.error(`\n[dry-run] Skipping filter, incremental sync, embed, upload, and afterUpload.`);
+    console.error(`[dry-run] Emitting ${allChunks.length} chunks as JSON to stdout.`);
+    process.stdout.write(JSON.stringify(allChunks, null, 2) + "\n");
+    return;
+  }
 
   // Quality filter
   const filtered = filterChunks(allChunks);
@@ -315,6 +328,25 @@ async function main() {
   console.error(`\nDone!`);
   console.error(`  Uploaded: ${processed}`);
   console.error(`  Errors: ${errors}`);
+
+  // Per-adapter afterUpload hooks
+  if (errors === 0 && processed > 0) {
+    for (const adapter of selectedAdapters) {
+      if (typeof adapter.afterUpload === "function") {
+        const adapterChunks = chunksToProcess.filter(c => c.source === adapter.name);
+        if (adapterChunks.length === 0) continue;
+        try {
+          console.error(`\n[${adapter.name}] Running afterUpload hook...`);
+          await adapter.afterUpload(adapterChunks, config);
+          console.error(`[${adapter.name}] afterUpload done`);
+        } catch (err) {
+          console.error(`[${adapter.name}] afterUpload error: ${err}. Chunks are uploaded; writeback skipped.`);
+        }
+      }
+    }
+  } else if (errors > 0) {
+    console.error(`Skipping afterUpload hooks because upload had ${errors} error(s).`);
+  }
 
   // Restore rejections
   if (rejectedSnapshot.length > 0) {

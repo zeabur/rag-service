@@ -13,6 +13,7 @@ export interface Chunk {
     parent_id: string | null;
     created_at: string | null;
     url: string | null;
+    visibility?: "internal" | "public";
   };
 }
 
@@ -26,6 +27,7 @@ export interface SourceAdapter {
    * @param config - Key-value pairs from env vars + CLI args.
    */
   export(config: Record<string, string>): Promise<Chunk[]>;
+  afterUpload?(chunks: Chunk[], config: Record<string, string>): Promise<void>;
 }
 
 // --- Helpers for embed/upload ---
@@ -41,6 +43,12 @@ export interface ExistingChunkRow {
   parent_id: string | null;
   created_at: string | null;
   url: string | null;
+  visibility: string | null;
+}
+
+function canonTs(ts: string | null | undefined): string | null {
+  if (!ts) return null;
+  try { return new Date(ts).toISOString(); } catch { return ts; }
 }
 
 export function normalizeChunk(chunk: Chunk): Record<string, unknown> {
@@ -52,8 +60,9 @@ export function normalizeChunk(chunk: Chunk): Record<string, unknown> {
     tags: chunk.metadata.tags,
     source: chunk.source,
     parent_id: chunk.metadata.parent_id,
-    created_at: chunk.metadata.created_at || null,
+    created_at: canonTs(chunk.metadata.created_at),
     url: chunk.metadata.url || null,
+    visibility: chunk.metadata.visibility ?? "public",
   };
 }
 
@@ -66,8 +75,9 @@ export function normalizeExistingRow(row: ExistingChunkRow): Record<string, unkn
     tags: row.tags || [],
     source: row.source || "",
     parent_id: row.parent_id,
-    created_at: row.created_at || null,
+    created_at: canonTs(row.created_at),
     url: row.url || null,
+    visibility: row.visibility ?? null,
   };
 }
 

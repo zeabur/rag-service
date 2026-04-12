@@ -18,6 +18,7 @@ export interface MatchedChunk {
   created_at?: string;
   source?: string;
   verified?: boolean;
+  status?: string;
   url?: string | null;
 }
 
@@ -188,7 +189,7 @@ async function searchHybridBM25(
   if (missingIds.length > 0) {
     const { data } = await insforge.database
       .from("poc_kb_chunks")
-      .select("id, title, question, answer, tags, created_at, source, verified, url")
+      .select("id, title, question, answer, tags, created_at, source, verified, status, url")
       .in("id", missingIds);
 
     if (data) {
@@ -204,7 +205,7 @@ async function searchHybridBM25(
 
   // Downrank unverified "learned" chunks
   for (const result of results) {
-    if (result.source === "learned" && !result.verified) {
+    if (result.source === "learned" && result.status !== "verified") {
       result.similarity *= 0.7;
     }
   }
@@ -363,6 +364,7 @@ async function main() {
         model: { type: "string", default: "claude-opus-4-5" },
         decay: { type: "string", default: "180" },
         rewrite: { type: "boolean", default: false },
+        visibility: { type: "string", default: "public" },
       },
       allowPositionals: true,
     });
@@ -382,6 +384,7 @@ Options:
   --model MODEL      LLM model for RAG mode (default: claude-opus-4-5)
   --decay DAYS       Temporal decay half-life in days (default: 180, 0 to disable)
   --rewrite          Expand query with LLM before search
+  --visibility SCOPE Search scope: public | internal | all (default: public)
 
 Examples:
   bun run src/query.ts "如何部署 Docker 服務"
@@ -403,9 +406,10 @@ Examples:
     const keywordWeight = parseFloat(values["keyword-weight"]!);
     const semanticWeight = parseFloat(values["semantic-weight"]!);
     const rewrite = values.rewrite!;
+    const visibility = (values.visibility as string) || "public";
 
     console.error(
-      `Searching [${mode}] (top: ${top}, threshold: ${threshold}, kw: ${keywordWeight}, sem: ${semanticWeight}, decay: ${decay}d, rewrite: ${rewrite})...`
+      `Searching [${mode}] (top: ${top}, threshold: ${threshold}, kw: ${keywordWeight}, sem: ${semanticWeight}, decay: ${decay}d, rewrite: ${rewrite}, visibility: ${visibility})...`
     );
     const chunks = await retrieveChunks(query, {
       mode,
@@ -415,6 +419,7 @@ Examples:
       semanticWeight,
       decayHalfLife: decay,
       rewrite,
+      visibility: visibility as "public" | "internal" | "all",
     });
 
     // Always show retrieval results
