@@ -2,6 +2,70 @@
 
 A self-hosted RAG service with hybrid search (semantic + BM25), admin dashboard, and Claude Code plugin for agent integration.
 
+## Architecture
+
+```
+                          rag-service
+ ┌─────────────────────────────────────────────────────────┐
+ │                                                         │
+ │  ┌─────────┐   ┌──────────┐   ┌───────────────────┐    │
+ │  │ Adapter  │──>│ Chunking │──>│  Embed & Upload    │    │
+ │  │ (json,md)│   │ (H2+para)│   │                    │    │
+ │  └─────────┘   └──────────┘   │  text-embedding-   │    │
+ │       ^                        │  3-small (1536d)   │    │
+ │       │ --input                └────────┬───────────┘    │
+ │       │ --dry-run                       │                │
+ │                                         v                │
+ │  ┌──────────────────────────────────────────────┐       │
+ │  │           InsForge (pgvector)                 │       │
+ │  │                                               │       │
+ │  │  poc_kb_chunks                                │       │
+ │  │  ┌─────┬──────┬───────────┬──────────┐       │       │
+ │  │  │ id  │ text │ embedding │ vis/tags │       │       │
+ │  │  └─────┴──────┴───────────┴──────────┘       │       │
+ │  │                                               │       │
+ │  │  AI Proxy: embeddings + chat completions      │       │
+ │  └──────────────────────────────────────────────┘       │
+ │                         │                                │
+ │              ┌──────────┴──────────┐                     │
+ │              v                     v                     │
+ │  ┌─────────────────┐   ┌──────────────────┐             │
+ │  │   BM25 search   │   │ Semantic search  │             │
+ │  │ (Intl.Segmenter │   │ (pgvector cosine)│             │
+ │  │  + Porter stem)  │   └────────┬─────────┘             │
+ │  └────────┬────────┘            │                        │
+ │           └──────────┬──────────┘                        │
+ │                      v                                   │
+ │             ┌─────────────────┐                          │
+ │             │   RRF Fusion    │                          │
+ │             │ (keyword 0.25 + │                          │
+ │             │  semantic 0.75) │                          │
+ │             └────────┬────────┘                          │
+ │                      v                                   │
+ │  ┌────────────────────────────────────────────┐         │
+ │  │  /api/query  →  chunks + optional LLM RAG  │         │
+ │  │  /api/learn  →  add chunk (unverified)      │         │
+ │  │  /api/report →  flag content issue          │         │
+ │  │  /dashboard  →  admin UI                    │         │
+ │  └────────────────────────────────────────────┘         │
+ └─────────────────────────────────────────────────────────┘
+
+            Agent Curation Loop
+ ┌───────────────────────────────────────┐
+ │                                       │
+ │  search ──> learn/report              │
+ │               │                       │
+ │               v                       │
+ │  triage ──> inspect ──> edit/verify   │
+ │               │                       │
+ │               v                       │
+ │  curate (walks queue item-by-item)    │
+ │               │                       │
+ │               v                       │
+ │  improved KB ──> better search ──>    │
+ └───────────────────────────────────────┘
+```
+
 ## Getting Started
 
 ### 1. Create a Zeabur Project
