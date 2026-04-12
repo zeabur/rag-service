@@ -114,11 +114,11 @@ export async function runMigrations() {
     "INDEX chunks(status)"
   );
 
-  // 4. Backfill status from verified boolean
-  console.error("\n=== 4. Backfill Status ===");
+  // 4. GIN index on tags for .contains() queries
+  console.error("\n=== 4. GIN Index on Tags ===");
   await runSQL(
-    `UPDATE poc_kb_chunks SET status = CASE WHEN verified = true THEN 'verified' ELSE 'unverified' END WHERE status IS NULL OR status = 'unverified' AND verified = true`,
-    "Backfill status from verified"
+    `CREATE INDEX IF NOT EXISTS idx_chunks_tags_gin ON poc_kb_chunks USING gin(tags)`,
+    "GIN INDEX chunks(tags)"
   );
 
   // 5. Update hybrid_search to support visibility filtering

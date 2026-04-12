@@ -138,7 +138,7 @@ async function searchHybridBM25(
   const bm25Results = index.search(queryText, pool, visibility);
 
   // 2. Semantic search via pgvector (hard-filtered by visibility in SQL)
-  const semanticResults = await searchChunks(embedding, 0.0, pool, visibility);
+  const semanticResults = await searchChunks(embedding, 0.3, pool, visibility);
 
   const bm25Rank = new Map(bm25Results.map((r, i) => [r.id, i + 1]));
   const semanticRank = new Map(semanticResults.map((r, i) => [r.id, i + 1]));
