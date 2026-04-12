@@ -131,6 +131,14 @@ Agents and admins operate on the same data — the skills just expose different 
 
 See `.env.example` for a complete template.
 
+## Embedding Model
+
+All vector embeddings use **`openai/text-embedding-3-small`** (1536 dimensions) via the InsForge AI proxy. No separate OpenAI API key is needed — the InsForge credentials (`INSFORGE_URL` / `INSFORGE_KEY`) handle both database and embedding requests.
+
+This model is used for:
+- **Query-time embedding** — vectorizing search queries (`src/query.ts`)
+- **Batch embedding** — vectorizing chunks during pipeline upload (`src/knowledge.ts`)
+
 ## Local Development
 
 ```bash
@@ -164,6 +172,7 @@ bun run pipeline --list
 | `--adapter <name>` | Run specific adapter(s). Repeat for multiple. Omit for all. |
 | `--input <path>` | Set INPUT_PATH in adapter config. |
 | `--replace` | Delete all chunks before import (full rebuild). |
+| `--dry-run` | Export chunks as JSON to stdout; skip embed/upload. |
 | `--list` | List available adapters and exit. |
 | `--help` | Show help. |
 
@@ -182,10 +191,20 @@ export default {
     // config contains all env vars + CLI --input as INPUT_PATH
     const chunks: Chunk[] = [];
     // ... fetch data, chunk it, push to chunks[] ...
+    // Set metadata.visibility to "internal" or "public" per chunk (default: "public")
     return chunks;
+  },
+
+  // Optional: called after successful upload with the uploaded chunks
+  async afterUpload(chunks, config) {
+    // e.g. write back chunk IDs to source files
   },
 } satisfies SourceAdapter;
 ```
+
+#### Chunk visibility
+
+Each chunk can set `metadata.visibility` to `"internal"` or `"public"`. Chunks without visibility default to `"public"`. Use `--visibility internal|public|all` with `src/query.ts` CLI to filter by visibility scope.
 
 Load external adapters by setting `RAG_ADAPTERS_PATH`:
 
