@@ -1,11 +1,11 @@
 ---
 name: zeabur-rag-triage
-description: List pending knowledge base maintenance items — open reports, unverified learned chunks, low-similarity queries, and negative feedback. Use when checking KB health, reviewing the maintenance queue, or starting a curation session. Triggers on "review queue", "what needs attention in the KB", "pending reports", "unverified chunks", "failed queries", "KB health check". Requires admin scope.
+description: List pending knowledge base maintenance items — open reports, unverified learned chunks, low-score queries, and negative feedback. Use when checking KB health, reviewing the maintenance queue, or starting a curation session. Triggers on "review queue", "what needs attention in the KB", "pending reports", "unverified chunks", "failed queries", "KB health check". Requires admin scope.
 ---
 
 # RAG — Triage
 
-Show what needs attention in the knowledge base. Returns 4 categories of pending items in a single call.
+Show what needs attention in the knowledge base. Returns 5 categories of pending items in a single call.
 
 Base URL: `$ZEABUR_RAG_URL`
 Auth: `Authorization: Bearer $RAG_API_KEY` — **admin scope required**
@@ -20,17 +20,18 @@ curl -s "$ZEABUR_RAG_URL/api/admin/triage?days=14&similarity_threshold=0.4&limit
 | Param | Default | Description |
 |-------|---------|-------------|
 | `days` | `14` | Time window for signals (reports and learned have no time window) |
-| `similarity_threshold` | `0.4` | Queries with `top_similarity` below this are flagged |
+| `similarity_threshold` | `0.4` | Queries with `top_similarity` below this are flagged. Note: in hybrid mode (RRF), scores are ~0–0.02 so the default 0.4 catches all hybrid queries. Adjust to ~0.005 for meaningful hybrid-mode filtering. |
 | `limit` | `20` | Max items per category |
 
 ## Response
 
-Returns JSON with 4 arrays + `counts` (true totals, not truncated) + `has_more` (boolean per category):
+Returns JSON with 5 arrays + `counts` (true totals, not truncated) + `has_more` (boolean per category):
 
 - **`open_reports`** — reports with `status='open'`, no time window. Fields: `id`, `type`, `chunk_id`, `query`, `detail`, `created_at`.
 - **`unverified_learned`** — learned chunks with `status='unverified'`, no time window. Fields: `id`, `title`, `tags`, `created_at`, `age_days`.
-- **`low_similarity_signals`** — queries where the best result scored below the threshold, within the time window, deduped by query text. Fields: `id`, `query`, `top_similarity`, `top_chunk_ids`, `client`, `created_at`.
+- **`low_similarity_signals`** — queries where the top score fell below the threshold, within the time window, deduped by query text. The score is RRF in hybrid mode (~0–0.02) or cosine in semantic mode (0–1). Fields: `id`, `query`, `top_similarity`, `top_chunk_ids`, `client`, `created_at`.
 - **`negative_feedback_signals`** — queries that got negative user feedback, within the time window. Fields: `id`, `query`, `feedback_score`, `feedback_comment`, `top_chunk_ids`, `created_at`.
+- **`needs_frontmatter`** — chunks whose tags include `"needs-frontmatter"`, meaning they were ingested from a source file that lacks proper frontmatter and got a temporary ID. Fields: `id`, `title`, `tags`, `url`, `source`, `created_at`.
 
 If a category query fails, its array is empty and a `<category>_error` field appears with the error message.
 

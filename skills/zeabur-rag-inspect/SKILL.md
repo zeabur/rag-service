@@ -42,7 +42,7 @@ curl -s "$ZEABUR_RAG_URL/api/admin/chunks/<chunk_id>" \
     { "id": "...", "type": "outdated", "query": "...", "detail": "...", "status": "open", "created_at": "..." }
   ],
   "signals": [
-    { "id": "...", "query": "...", "mode": "hybrid", "top_similarity": 0.45, "feedback_score": null, "created_at": "..." }
+    { "id": "...", "query": "...", "mode": "hybrid", "top_similarity": 0.012, "feedback_score": null, "created_at": "..." }
   ],
   "audit_log": [
     { "id": "...", "chunk_id": "SUP-1234", "action": "edit", "old_value": {}, "new_value": {}, "created_at": "..." }

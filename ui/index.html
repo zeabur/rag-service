@@ -22,99 +22,557 @@
         .markdown-content pre code { background-color: transparent; padding: 0; font-size: 0.85rem; }
         .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; font-size: 0.7rem; background: #fff; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
         .markdown-content pre:hover .copy-btn { opacity: 1; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="bg-gray-50 h-screen flex flex-col" x-data="chatApp()" x-init="init()">
+<body class="bg-gray-50 h-screen flex flex-col" x-data="searchApp()" x-init="init()">
+
     <!-- Header -->
     <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm z-10">
         <div class="flex items-center space-x-2">
             <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
             <h1 class="text-lg font-semibold text-gray-800">RAG Service</h1>
         </div>
-        <div class="flex items-center space-x-3">
-            <div id="site-nav"></div>
-            <button @click="showSettingsModal = true"
-                    class="relative flex items-center space-x-1.5 border rounded-md px-3 py-1.5 bg-white transition"
-                    :class="settings.apiKey ? 'border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600' : 'border-orange-300 text-orange-500 hover:border-orange-400'"
-                    title="Settings">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                <span class="text-sm">Settings</span>
-                <span x-show="settings.apiKey" x-cloak class="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></span>
-            </button>
-        </div>
+        <div id="site-nav"></div>
     </header>
 
-    <!-- Chat Area -->
-    <main class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6" id="chat-messages">
-        <template x-for="(msg, index) in messages" :key="index">
-            <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
-                <div :class="msg.role === 'user' ? 'bg-indigo-600 text-white max-w-[80%]' : 'bg-white border text-gray-800 max-w-[95%] lg:max-w-[80%]'" 
-                     class="rounded-2xl px-5 py-4 shadow-sm relative group">
-                    
-                    <!-- Role Label -->
-                    <div class="text-[10px] uppercase font-bold tracking-wider mb-1 opacity-50" 
-                         :class="msg.role === 'user' ? 'text-right' : 'text-left'">
-                        <span x-text="msg.role === 'user' ? 'You' : 'Assistant'"></span>
-                    </div>
+    <!-- Sub-tabs -->
+    <div class="border-b bg-white px-6 flex items-end justify-between">
+        <nav class="flex space-x-1 overflow-x-auto scrollbar-hide whitespace-nowrap min-w-0">
+            <template x-for="t in tabs" :key="t.id">
+                <button @click="switchTab(t.id)"
+                    :class="tab === t.id ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'"
+                    class="px-4 py-3 text-sm font-medium transition shrink-0" x-text="t.label"></button>
+            </template>
+        </nav>
+        <div class="pb-2">
+            <button @click="showSettingsModal = true"
+                    class="relative p-2 rounded-md transition"
+                    :class="settings.apiKey ? 'text-gray-400 hover:text-indigo-600 hover:bg-gray-100' : 'text-orange-500 hover:text-orange-600 hover:bg-orange-50'"
+                    title="Settings">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span x-show="settings.apiKey" x-cloak class="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+            </button>
+        </div>
+    </div>
 
-                    <!-- Content -->
-                    <div class="markdown-content prose max-w-none" x-html="renderMarkdown(msg.content)"></div>
-
-                    <!-- Sources -->
-                    <template x-if="msg.chunks && msg.chunks.length > 0">
-                        <div class="mt-4 pt-4 border-t border-gray-100">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="flex items-center">
-                                    <svg class="w-3 h-3 text-indigo-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sources</p>
-                                </div>
-                                <!-- Feedback Buttons -->
-                                <div class="flex items-center space-x-2" x-show="!msg.feedbackSent">
-                                    <button @click="sendFeedback(msg, 1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-green-600 transition" title="Helpful">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.708C19.921 10 21 11.071 21 12.389c0 .546-.188 1.054-.505 1.462l-2.43 3.125A3 3 0 0115.702 18H11v-8l3-4V4h-1v4l-3 4H4v6h4v2H4a2 2 0 01-2-2v-6a2 2 0 012-2h4l3-4V4a2 2 0 012-2h1a2 2 0 012 2v2.5l-3 4z"></path></svg>
-                                    </button>
-                                    <button @click="sendFeedback(msg, -1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600 transition" title="Not helpful">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14H5.292C4.079 14 3 12.929 3 11.611c0-.546.188-1.054.505-1.462l2.43-3.125A3 3 0 018.298 6H13v8l-3 4v2h1v-4l3-4h4v-6h-4v-2h4a2 2 0 012 2v6a2 2 0 01-2 2h-4l-3 4v2a2 2 0 01-2 2h-1a2 2 0 01-2-2v-2.5l3-4z"></path></svg>
-                                    </button>
-                                </div>
-                                <div x-show="msg.feedbackSent" class="text-[10px] text-green-600 font-bold italic" x-cloak>Feedback received!</div>
+    <!-- ==================== Tab: Chat ==================== -->
+    <template x-if="tab === 'chat'">
+        <div class="flex-1 flex flex-col min-h-0">
+            <!-- Chat messages -->
+            <main class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6" id="chat-messages">
+                <template x-for="(msg, index) in chat.messages" :key="index">
+                    <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+                        <div :class="msg.role === 'user' ? 'bg-indigo-600 text-white max-w-[80%]' : 'bg-white border text-gray-800 max-w-[95%] lg:max-w-[80%]'"
+                             class="rounded-2xl px-5 py-4 shadow-sm relative group">
+                            <div class="text-[10px] uppercase font-bold tracking-wider mb-1 opacity-50"
+                                 :class="msg.role === 'user' ? 'text-right' : 'text-left'">
+                                <span x-text="msg.role === 'user' ? 'You' : 'Assistant'"></span>
                             </div>
-                            <div class="flex flex-wrap gap-2">
-                                <template x-for="chunk in msg.chunks" :key="chunk.id">
-                                    <div class="flex items-center gap-1">
-                                        <button @click="showSource(chunk)"
-                                                class="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 transition flex items-center">
-                                            <span x-text="chunk.id"></span>
-                                            <span class="ml-1 opacity-50" x-text="'(' + (chunk.similarity * 100).toFixed(0) + '%)'"></span>
-                                            <span class="ml-1.5 pl-1.5 border-l border-indigo-200 text-[9px]" x-text="formatDate(chunk.created_at)"></span>
-                                        </button>
-                                        <a :href="'/report?chunk_id=' + encodeURIComponent(chunk.id) + '&query=' + encodeURIComponent(msg.queryContext || '')"
-                                           target="_blank"
-                                           rel="noopener noreferrer"
-                                           class="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-full border border-red-100 transition flex items-center">
-                                            Report
-                                        </a>
+                            <div class="markdown-content prose max-w-none" x-html="renderMarkdown(msg.content)"></div>
+
+                            <!-- Sources -->
+                            <template x-if="msg.chunks && msg.chunks.length > 0">
+                                <div class="mt-4 pt-4 border-t border-gray-100">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center">
+                                            <svg class="w-3 h-3 text-indigo-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sources</p>
+                                        </div>
+                                        <div class="flex items-center space-x-2" x-show="!msg.feedbackSent">
+                                            <button @click="chatSendFeedback(msg, 1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-green-600 transition" title="Helpful">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.708C19.921 10 21 11.071 21 12.389c0 .546-.188 1.054-.505 1.462l-2.43 3.125A3 3 0 0115.702 18H11v-8l3-4V4h-1v4l-3 4H4v6h4v2H4a2 2 0 01-2-2v-6a2 2 0 012-2h4l3-4V4a2 2 0 012-2h1a2 2 0 012 2v2.5l-3 4z"></path></svg>
+                                            </button>
+                                            <button @click="chatSendFeedback(msg, -1)" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600 transition" title="Not helpful">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14H5.292C4.079 14 3 12.929 3 11.611c0-.546.188-1.054.505-1.462l2.43-3.125A3 3 0 018.298 6H13v8l-3 4v2h1v-4l3-4h4v-6h-4v-2h4a2 2 0 012 2v6a2 2 0 01-2 2h-4l-3 4v2a2 2 0 01-2 2h-1a2 2 0 01-2-2v-2.5l3-4z"></path></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="msg.feedbackSent" class="text-[10px] text-green-600 font-bold italic" x-cloak>Feedback received!</div>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <template x-for="chunk in msg.chunks" :key="chunk.id">
+                                            <div class="flex items-center gap-1">
+                                                <button @click="selectedSource = chunk"
+                                                        class="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 transition flex items-center">
+                                                    <span x-text="chunk.id"></span>
+                                                    <span class="ml-1 opacity-50" x-text="'(' + (chunk.similarity * 100).toFixed(0) + '%)'"></span>
+                                                    <span class="ml-1.5 pl-1.5 border-l border-indigo-200 text-[9px]" x-text="formatDate(chunk.created_at)"></span>
+                                                </button>
+                                                <button @click="openReport(chunk.id, msg.queryContext)"
+                                                        class="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-full border border-red-100 transition flex items-center">
+                                                    Report
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Loading -->
+                <div x-show="chat.loading" class="flex justify-start" x-cloak>
+                    <div class="bg-white border rounded-2xl px-6 py-4 shadow-sm flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
+                        <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-.3s]"></div>
+                        <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-.5s]"></div>
+                        <span class="text-xs text-gray-400 ml-2" x-text="chat.loadingStatus"></span>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Input -->
+            <footer class="bg-white border-t p-4 md:p-6 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <form @submit.prevent="chatSend()" class="max-w-4xl mx-auto flex space-x-3 md:space-x-4">
+                    <input type="text" x-model="chat.input"
+                           class="flex-1 border-gray-200 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm transition-all"
+                           placeholder="Ask a question..."
+                           :disabled="chat.loading"
+                           autofocus>
+                    <button type="submit"
+                            class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md active:transform active:scale-95"
+                            :disabled="chat.loading || !chat.input.trim()">
+                        <span x-show="!chat.loading">Send</span>
+                        <svg x-show="chat.loading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                </form>
+                <p class="text-center text-[10px] text-gray-400 mt-3 font-medium">AI responses may be inaccurate. Please verify important information.</p>
+            </footer>
+        </div>
+    </template>
+
+    <!-- ==================== Tab: Report ==================== -->
+    <template x-if="tab === 'report'">
+        <main class="flex-1 overflow-y-auto py-10 px-4">
+            <div class="max-w-2xl mx-auto">
+                <!-- Success -->
+                <div x-show="report.submitted" x-cloak class="bg-green-50 border border-green-200 rounded-2xl p-8 text-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <h2 class="text-lg font-bold text-green-800 mb-1">Report Received</h2>
+                    <p class="text-sm text-green-600 mb-6">Thank you for your report. The team will review it shortly.</p>
+                    <div class="flex justify-center space-x-3">
+                        <button @click="reportReset()" class="px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition">Report Another</button>
+                        <button @click="switchTab('chat')" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">Back to Chat</button>
+                    </div>
+                </div>
+
+                <!-- Form -->
+                <div x-show="!report.submitted">
+                    <p class="text-sm text-gray-500 mb-6">Report incorrect, outdated, or missing knowledge in search results.</p>
+                    <form @submit.prevent="reportSubmit()" class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Issue Type <span class="text-red-400">*</span></label>
+                            <select x-model="report.form.type" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
+                                <option value="outdated">Outdated — Content is outdated</option>
+                                <option value="incorrect">Incorrect — Content is incorrect</option>
+                                <option value="missing">Missing — Topic missing from knowledge base</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Chunk ID <span class="text-gray-400 font-normal ml-1">(Optional)</span></label>
+                            <input type="text" x-model="report.form.chunk_id" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none" placeholder="SUP-1234 or DOC-xxx">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Search Query <span class="text-gray-400 font-normal ml-1">(Optional)</span></label>
+                            <input type="text" x-model="report.form.query" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none" placeholder="The query you searched">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Description <span class="text-red-400">*</span></label>
+                            <textarea x-model="report.form.detail" required rows="4" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-none" placeholder="Describe what's wrong, what the correct answer is, etc..."></textarea>
+                        </div>
+                        <div x-show="report.error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3" x-text="report.error"></div>
+                        <button type="submit" :disabled="report.submitting" class="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">
+                            <span x-show="!report.submitting">Submit Report</span>
+                            <span x-show="report.submitting" x-cloak>Submitting...</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </template>
+
+    <!-- ==================== Tab: Learn ==================== -->
+    <template x-if="tab === 'learn'">
+        <main class="flex-1 overflow-y-auto py-10 px-4">
+            <div class="max-w-2xl mx-auto">
+                <!-- Success -->
+                <div x-show="learn.id" x-cloak class="bg-green-50 border border-green-200 rounded-2xl p-8 text-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <h2 class="text-lg font-bold text-green-800 mb-1">Knowledge Added</h2>
+                    <p class="text-sm text-green-600 mb-3">Knowledge indexed and searchable (score x0.7 until admin verifies).</p>
+                    <div class="flex items-center justify-center space-x-2 mb-6">
+                        <span class="text-xs text-gray-500">ID:</span>
+                        <code class="bg-white border border-green-200 text-green-800 font-mono text-sm px-3 py-1 rounded-lg cursor-pointer hover:bg-green-50 transition"
+                              x-text="learn.id" @click="learnCopyId()" :title="learn.copied ? 'Copied!' : 'Click to copy'"></code>
+                        <span x-show="learn.copied" x-cloak class="text-xs text-green-600 font-medium">Copied!</span>
+                    </div>
+                    <div class="flex justify-center space-x-3">
+                        <button @click="learnReset()" class="px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition">Add Another</button>
+                        <button @click="switchTab('chat')" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">Back to Chat</button>
+                    </div>
+                </div>
+
+                <!-- Form -->
+                <div x-show="!learn.id">
+                    <p class="text-sm text-gray-500 mb-6">Contribute verified knowledge. Only submit information you know is correct.</p>
+                    <form @submit.prevent="learnSubmit()" class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Title <span class="text-red-400">*</span></label>
+                            <input type="text" x-model="learn.form.title" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none" placeholder="Short description of this knowledge">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Content <span class="text-red-400">*</span> <span class="text-gray-400 font-normal">(Supports Markdown)</span></label>
+                            <textarea x-model="learn.form.content" required rows="8" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-y" placeholder="Knowledge content, supports Markdown..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Tags <span class="text-gray-400 font-normal ml-1">(Optional, comma-separated)</span></label>
+                            <input type="text" x-model="learn.form.tags" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none" placeholder="deployment, domain, billing">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Source Query <span class="text-gray-400 font-normal ml-1">(Optional)</span></label>
+                            <input type="text" x-model="learn.form.source_query" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none" placeholder="The original user question that prompted this knowledge">
+                        </div>
+                        <div x-show="learn.error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3" x-text="learn.error"></div>
+                        <button type="submit" :disabled="learn.submitting" class="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">
+                            <span x-show="!learn.submitting">Submit</span>
+                            <span x-show="learn.submitting" x-cloak>Submitting...</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </template>
+
+    <!-- ==================== Tab: Inspect ==================== -->
+    <template x-if="tab === 'inspect'">
+        <main class="flex-1 overflow-y-auto py-10 px-4">
+            <div class="max-w-3xl mx-auto">
+                <p class="text-sm text-gray-500 mb-6">View a chunk's full content, related reports, search signals, and edit history.</p>
+
+                <!-- Search bar -->
+                <form @submit.prevent="inspectLoad()" class="flex space-x-3 mb-8">
+                    <input type="text" x-model="inspect.idInput" required
+                           class="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
+                           placeholder="Enter Chunk ID (e.g. SUP-1234, DOC-xxx)">
+                    <button type="submit" :disabled="inspect.loading || !inspect.idInput.trim()"
+                            class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">
+                        <span x-show="!inspect.loading">Inspect</span>
+                        <span x-show="inspect.loading" x-cloak>Loading...</span>
+                    </button>
+                </form>
+
+                <div x-show="inspect.error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-6" x-text="inspect.error"></div>
+
+                <!-- Result -->
+                <template x-if="inspect.data">
+                    <div class="space-y-6">
+                        <!-- Chunk info -->
+                        <div class="bg-white border rounded-xl p-6 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-lg font-bold text-gray-900" x-text="inspect.data.chunk.title"></h3>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                                        :class="inspect.data.chunk.status === 'verified' ? 'bg-green-100 text-green-700' : inspect.data.chunk.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'"
+                                        x-text="inspect.data.chunk.status"></span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600" x-text="inspect.data.chunk.visibility || 'public'"></span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600" x-text="inspect.data.chunk.source"></span>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500">
+                                <span class="font-mono" x-text="inspect.data.chunk.id"></span>
+                                <span class="mx-2">·</span>
+                                <span x-text="formatFullDate(inspect.data.chunk.created_at)"></span>
+                            </div>
+                            <div x-show="inspect.data.chunk.question">
+                                <label class="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block mb-1">Question</label>
+                                <div class="text-sm text-gray-800 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100" x-text="inspect.data.chunk.question"></div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-green-600 uppercase tracking-widest block mb-1">Answer</label>
+                                <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed bg-gray-50 p-3 rounded-lg border" x-text="inspect.data.chunk.answer"></div>
+                            </div>
+                            <div x-show="(inspect.data.chunk.tags || []).length" class="flex flex-wrap gap-1">
+                                <template x-for="tag in (inspect.data.chunk.tags || [])" :key="tag">
+                                    <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded" x-text="tag"></span>
+                                </template>
+                            </div>
+                            <div class="flex space-x-2 pt-2">
+                                <button @click="openReport(inspect.data.chunk.id, '')" class="text-xs px-3 py-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50 transition">Report</button>
+                                <button @click="startEdit(inspect.data.chunk)" class="text-xs px-3 py-1.5 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition">Edit</button>
+                            </div>
+                        </div>
+
+                        <!-- Reports -->
+                        <div x-show="inspect.data.reports.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Reports (<span x-text="inspect.data.reports.length"></span>)</h4>
+                            <div class="space-y-2">
+                                <template x-for="r in inspect.data.reports" :key="r.id">
+                                    <div class="text-sm border rounded-lg p-3 flex justify-between items-start">
+                                        <div>
+                                            <span class="text-xs px-1.5 py-0.5 rounded font-medium mr-2"
+                                                :class="r.status === 'open' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'"
+                                                x-text="r.status"></span>
+                                            <span class="text-xs text-gray-500" x-text="r.type"></span>
+                                            <p class="text-gray-700 mt-1" x-text="r.detail"></p>
+                                        </div>
+                                        <span class="text-[10px] text-gray-400 shrink-0 ml-3" x-text="formatDate(r.created_at)"></span>
                                     </div>
                                 </template>
                             </div>
                         </div>
-                    </template>
+
+                        <!-- Signals -->
+                        <div x-show="inspect.data.signals.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Search Signals (<span x-text="inspect.data.signals.length"></span>)</h4>
+                            <div class="space-y-2">
+                                <template x-for="s in inspect.data.signals" :key="s.id">
+                                    <div class="text-sm border rounded-lg p-3 flex justify-between items-center">
+                                        <span class="text-gray-700 truncate" x-text="s.query"></span>
+                                        <div class="flex items-center space-x-2 shrink-0 ml-3">
+                                            <span class="text-xs text-gray-400" x-text="s.mode"></span>
+                                            <span class="text-xs font-mono" :class="s.top_similarity > 0.5 ? 'text-green-600' : 'text-orange-500'" x-text="(s.top_similarity || 0).toFixed(3)"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Audit Log -->
+                        <div x-show="inspect.data.audit_log.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Audit Log (<span x-text="inspect.data.audit_log.length"></span>)</h4>
+                            <div class="space-y-2">
+                                <template x-for="a in inspect.data.audit_log" :key="a.id">
+                                    <div class="text-sm border rounded-lg p-3 flex justify-between items-center">
+                                        <div>
+                                            <span class="text-xs px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-600" x-text="a.action"></span>
+                                            <span class="text-xs text-gray-500 ml-2" x-text="a.changes ? JSON.stringify(a.changes).slice(0, 80) : ''"></span>
+                                        </div>
+                                        <span class="text-[10px] text-gray-400 shrink-0 ml-3" x-text="formatFullDate(a.created_at)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </main>
+    </template>
+
+    <!-- ==================== Tab: Triage ==================== -->
+    <template x-if="tab === 'triage'">
+        <main class="flex-1 overflow-y-auto py-10 px-4">
+            <div class="max-w-4xl mx-auto">
+                <div class="flex items-center justify-between mb-6">
+                    <p class="text-sm text-gray-500">Review queue for knowledge base maintenance — open reports, unverified chunks, low-similarity queries, and negative feedback.</p>
+                    <button @click="triageLoad()" :disabled="triage.loading"
+                            class="text-sm px-3 py-1.5 border rounded-lg text-gray-600 hover:bg-gray-50 transition disabled:opacity-50">
+                        <span x-show="!triage.loading">Refresh</span>
+                        <span x-show="triage.loading" x-cloak>Loading...</span>
+                    </button>
+                </div>
+                <div x-show="triage.error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-6" x-text="triage.error"></div>
+
+                <template x-if="triage.data">
+                    <div class="space-y-6">
+                        <!-- Summary cards -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div class="bg-white border rounded-xl p-4 text-center relative group">
+                                <div class="text-2xl font-bold text-orange-600" x-text="triage.data.counts.open_reports"></div>
+                                <div class="text-xs text-gray-500 mt-1 flex items-center justify-center gap-1">
+                                    Open Reports
+                                    <span class="cursor-help text-gray-300 hover:text-gray-500">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 4h.01"/></svg>
+                                    </span>
+                                </div>
+                                <div class="hidden group-hover:block absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg">
+                                    Issues reported by users or agents — outdated, incorrect, or missing knowledge that needs review.
+                                </div>
+                            </div>
+                            <div class="bg-white border rounded-xl p-4 text-center relative group">
+                                <div class="text-2xl font-bold text-yellow-600" x-text="triage.data.counts.unverified_learned"></div>
+                                <div class="text-xs text-gray-500 mt-1 flex items-center justify-center gap-1">
+                                    Unverified
+                                    <span class="cursor-help text-gray-300 hover:text-gray-500">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 4h.01"/></svg>
+                                    </span>
+                                </div>
+                                <div class="hidden group-hover:block absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg">
+                                    Chunks contributed via Learn that haven't been verified by an admin yet. Score is reduced by 30% until approved.
+                                </div>
+                            </div>
+                            <div class="bg-white border rounded-xl p-4 text-center relative group">
+                                <div class="text-2xl font-bold text-red-600" x-text="triage.data.counts.low_similarity_signals"></div>
+                                <div class="text-xs text-gray-500 mt-1 flex items-center justify-center gap-1">
+                                    Low Score
+                                    <span class="cursor-help text-gray-300 hover:text-gray-500">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 4h.01"/></svg>
+                                    </span>
+                                </div>
+                                <div class="hidden group-hover:block absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg">
+                                    Queries where the top score fell below the threshold — likely topics not yet covered in the knowledge base.
+                                </div>
+                            </div>
+                            <div class="bg-white border rounded-xl p-4 text-center relative group">
+                                <div class="text-2xl font-bold text-red-600" x-text="triage.data.counts.negative_feedback_signals"></div>
+                                <div class="text-xs text-gray-500 mt-1 flex items-center justify-center gap-1">
+                                    Negative Feedback
+                                    <span class="cursor-help text-gray-300 hover:text-gray-500">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 4h.01"/></svg>
+                                    </span>
+                                </div>
+                                <div class="hidden group-hover:block absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg">
+                                    Queries where users gave a thumbs-down — the answer was unhelpful, wrong, or the retrieved sources didn't match.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Open Reports -->
+                        <div x-show="triage.data.open_reports.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Open Reports</h4>
+                            <div class="space-y-2">
+                                <template x-for="r in triage.data.open_reports" :key="r.id">
+                                    <div class="text-sm border rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition" @click="r.chunk_id && inspectChunk(r.chunk_id)">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-xs px-1.5 py-0.5 rounded font-medium bg-orange-100 text-orange-700" x-text="r.type"></span>
+                                                <span x-show="r.chunk_id" class="text-xs font-mono text-indigo-600" x-text="r.chunk_id"></span>
+                                            </div>
+                                            <span class="text-[10px] text-gray-400" x-text="formatDate(r.created_at)"></span>
+                                        </div>
+                                        <p class="text-gray-700 mt-1 truncate" x-text="r.detail"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Unverified Learned -->
+                        <div x-show="triage.data.unverified_learned.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Unverified Learned Chunks</h4>
+                            <div class="space-y-2">
+                                <template x-for="c in triage.data.unverified_learned" :key="c.id">
+                                    <div class="text-sm border rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition flex justify-between items-center" @click="inspectChunk(c.id)">
+                                        <div>
+                                            <span class="font-mono text-xs text-indigo-600" x-text="c.id"></span>
+                                            <span class="text-gray-700 ml-2" x-text="c.title"></span>
+                                        </div>
+                                        <span class="text-[10px] text-gray-400 shrink-0" x-text="c.age_days != null ? c.age_days + 'd ago' : ''"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Low Score -->
+                        <div x-show="triage.data.low_similarity_signals.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Low Score Queries</h4>
+                            <div class="space-y-2">
+                                <template x-for="s in triage.data.low_similarity_signals" :key="s.id">
+                                    <div class="text-sm border rounded-lg p-3 flex justify-between items-center">
+                                        <span class="text-gray-700 truncate" x-text="s.query"></span>
+                                        <span class="text-xs font-mono text-orange-500 shrink-0 ml-3" x-text="(s.top_similarity || 0).toFixed(3)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Negative Feedback -->
+                        <div x-show="triage.data.negative_feedback_signals.length > 0" class="bg-white border rounded-xl p-6">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Negative Feedback</h4>
+                            <div class="space-y-2">
+                                <template x-for="s in triage.data.negative_feedback_signals" :key="s.id">
+                                    <div class="text-sm border rounded-lg p-3 flex justify-between items-center">
+                                        <span class="text-gray-700 truncate" x-text="s.query"></span>
+                                        <span class="text-[10px] text-gray-400 shrink-0 ml-3" x-text="formatDate(s.created_at)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </main>
+    </template>
+
+    <!-- ==================== Tab: Edit ==================== -->
+    <template x-if="tab === 'edit'">
+        <main class="flex-1 overflow-y-auto py-10 px-4">
+            <div class="max-w-2xl mx-auto">
+                <!-- No chunk selected -->
+                <div x-show="!edit.chunkId">
+                    <p class="text-sm text-gray-500 mb-6">Edit a chunk's content, tags, or visibility. Enter a Chunk ID or use Inspect → Edit.</p>
+                    <form @submit.prevent="editLoadChunk()" class="flex space-x-3">
+                        <input type="text" x-model="edit.idInput" required
+                               class="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
+                               placeholder="Enter Chunk ID">
+                        <button type="submit" :disabled="edit.loading || !edit.idInput.trim()"
+                                class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">Load</button>
+                    </form>
+                </div>
+
+                <!-- Edit form -->
+                <div x-show="edit.chunkId">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-800">Editing: <span class="font-mono text-indigo-600" x-text="edit.chunkId"></span></h3>
+                        </div>
+                        <button @click="editReset()" class="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                    </div>
+                    <form @submit.prevent="editSubmit()" class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Title</label>
+                            <input type="text" x-model="edit.form.title" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Question</label>
+                            <textarea x-model="edit.form.question" rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-y"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Answer</label>
+                            <textarea x-model="edit.form.answer" rows="8" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-y"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Tags <span class="text-gray-400 font-normal">(comma-separated)</span></label>
+                            <input type="text" x-model="edit.form.tags" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Status</label>
+                                <select x-model="edit.form.status" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
+                                    <option value="unverified">Unverified</option>
+                                    <option value="verified">Verified</option>
+                                    <option value="rejected">Rejected</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Visibility</label>
+                                <select x-model="edit.form.visibility" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
+                                    <option value="public">Public</option>
+                                    <option value="internal">Internal</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div x-show="edit.error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3" x-text="edit.error"></div>
+                        <div x-show="edit.success" x-cloak class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl px-4 py-3">Chunk updated successfully.</div>
+                        <button type="submit" :disabled="edit.saving"
+                                class="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition">
+                            <span x-show="!edit.saving">Save Changes</span>
+                            <span x-show="edit.saving" x-cloak>Saving...</span>
+                        </button>
+                    </form>
                 </div>
             </div>
-        </template>
+        </main>
+    </template>
 
-        <!-- Loading Indicator -->
-        <div x-show="loading" class="flex justify-start" x-cloak>
-            <div class="bg-white border rounded-2xl px-6 py-4 shadow-sm flex items-center space-x-2">
-                <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
-                <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-.3s]"></div>
-                <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-.5s]"></div>
-                <span class="text-xs text-gray-400 ml-2" x-text="loadingStatus"></span>
-            </div>
-        </div>
-    </main>
-
-    <!-- Settings Modal -->
+    <!-- ==================== Settings Modal ==================== -->
     <div x-show="showSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak @click.self="showSettingsModal = false; sessionStorage.setItem('rag_settings_dismissed', '1')">
         <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
             <div class="bg-gray-800 px-6 py-5 flex items-center justify-between">
@@ -129,7 +587,6 @@
                 </button>
             </div>
             <div class="p-6 space-y-6">
-                <!-- API Key -->
                 <div>
                     <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">API Key</label>
                     <input type="password" x-model="apiKeyInput" @input="saveApiKey()"
@@ -137,7 +594,6 @@
                            placeholder="rag_xxxxxxxxxxxxxxxx">
                     <p x-show="settings.apiKey" x-cloak class="text-xs text-green-600 mt-1.5">✓ Connected</p>
                 </div>
-                <!-- Model -->
                 <div>
                     <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">Model</label>
                     <select x-model="settings.model" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
@@ -161,7 +617,6 @@
                         </optgroup>
                     </select>
                 </div>
-                <!-- Hybrid Search -->
                 <div class="flex items-center justify-between">
                     <div>
                         <div class="text-sm font-medium text-gray-800">Hybrid Search</div>
@@ -174,7 +629,6 @@
                               :class="settings.hybrid ? 'translate-x-5' : 'translate-x-0'"></span>
                     </button>
                 </div>
-                <!-- Decay -->
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <div>
@@ -186,7 +640,6 @@
                     <input type="range" min="0" max="730" step="30" x-model="settings.decay"
                            class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
                 </div>
-                <!-- Visibility -->
                 <div class="flex items-center justify-between">
                     <div>
                         <div class="text-sm font-medium text-gray-800">Internal Search</div>
@@ -207,7 +660,7 @@
         </div>
     </div>
 
-    <!-- Source Modal -->
+    <!-- ==================== Source Modal ==================== -->
     <div x-show="selectedSource" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak @click.self="selectedSource = null">
         <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
@@ -252,47 +705,80 @@
         </div>
     </div>
 
-    <!-- Input Area -->
-    <footer class="bg-white border-t p-4 md:p-6 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <form @submit.prevent="sendMessage()" class="max-w-4xl mx-auto flex space-x-3 md:space-x-4">
-            <input type="text" x-model="input" 
-                   class="flex-1 border-gray-200 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm transition-all"
-                   placeholder="Ask a question..."
-                   :disabled="loading"
-                   autofocus>
-            <button type="submit" 
-                    class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md active:transform active:scale-95"
-                    :disabled="loading || !input.trim()">
-                <span x-show="!loading">Send</span>
-                <svg x-show="loading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            </button>
-        </form>
-        <p class="text-center text-[10px] text-gray-400 mt-3 font-medium">AI responses may be inaccurate. Please verify important information.</p>
-    </footer>
-
     <script>
-        function chatApp() {
+        function searchApp() {
             return {
-                input: '',
-                loading: false,
-                loadingStatus: '',
-                messages: [
-                    { role: 'assistant', content: 'Hello! I\'m your knowledge base assistant. How can I help you?' }
+                // ── Tabs ──
+                tabs: [
+                    { id: 'chat', label: 'Chat' },
+                    { id: 'report', label: 'Report' },
+                    { id: 'learn', label: 'Learn' },
+                    { id: 'triage', label: 'Triage' },
+                    { id: 'inspect', label: 'Inspect' },
+                    { id: 'edit', label: 'Edit' },
                 ],
-                settings: {
-                    hybrid: true,
-                    model: 'gemini-2.5-flash',
-                    decay: 180,
-                    visibility: 'public',
-                    apiKey: ''
-                },
-                selectedSource: null,
+                tab: 'chat',
+
+                // ── Shared ──
+                settings: { hybrid: true, model: 'gemini-2.5-flash', decay: 180, visibility: 'public', apiKey: '' },
                 showSettingsModal: false,
                 apiKeyInput: '',
+                selectedSource: null,
 
+                // ── Chat state ──
+                chat: {
+                    input: '',
+                    loading: false,
+                    loadingStatus: '',
+                    messages: [
+                        { role: 'assistant', content: 'Hello! I\'m your knowledge base assistant. How can I help you?' }
+                    ],
+                },
+
+                // ── Report state ──
+                report: {
+                    form: { type: 'outdated', chunk_id: '', query: '', detail: '' },
+                    submitted: false,
+                    submitting: false,
+                    error: '',
+                },
+
+                // ── Learn state ──
+                learn: {
+                    form: { title: '', content: '', tags: '', source_query: '' },
+                    id: '',
+                    copied: false,
+                    submitting: false,
+                    error: '',
+                },
+
+                // ── Inspect state ──
+                inspect: {
+                    idInput: '',
+                    loading: false,
+                    error: '',
+                    data: null,
+                },
+
+                // ── Triage state ──
+                triage: {
+                    loading: false,
+                    error: '',
+                    data: null,
+                },
+
+                // ── Edit state ──
+                edit: {
+                    idInput: '',
+                    chunkId: '',
+                    loading: false,
+                    saving: false,
+                    error: '',
+                    success: false,
+                    form: { title: '', question: '', answer: '', tags: '', status: '', visibility: '' },
+                },
+
+                // ── Init ──
                 init() {
                     this.settings.apiKey = localStorage.getItem('rag_api_key') || '';
                     this.apiKeyInput = this.settings.apiKey;
@@ -301,13 +787,54 @@
                     }
                     marked.setOptions({
                         highlight: function(code, lang) {
-                            if (lang && hljs.getLanguage(lang)) {
-                                return hljs.highlight(code, { language: lang }).value;
-                            }
+                            if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
                             return hljs.highlightAuto(code).value;
                         },
-                        breaks: true
+                        breaks: true,
                     });
+
+                    // Handle URL params: ?tab=report&chunk_id=...&query=...&id=...
+                    const params = new URLSearchParams(window.location.search);
+                    const urlTab = params.get('tab');
+                    if (urlTab && this.tabs.some(t => t.id === urlTab)) this.tab = urlTab;
+                    if (params.get('chunk_id') && this.tab !== 'inspect') {
+                        this.tab = 'report';
+                        this.report.form.chunk_id = params.get('chunk_id');
+                        this.report.form.type = 'outdated';
+                    }
+                    if (params.get('query') && this.tab === 'report') {
+                        this.report.form.query = params.get('query');
+                    }
+                    // Auto-load for inspect tab
+                    if (this.tab === 'inspect' && params.get('id')) {
+                        this.inspect.idInput = params.get('id');
+                        this.$nextTick(() => this.inspectLoad());
+                    }
+                    // Auto-load triage data
+                    if (this.tab === 'triage') {
+                        this.$nextTick(() => this.triageLoad());
+                    }
+                },
+
+                // ── Shared methods ──
+                switchTab(id) {
+                    this.tab = id;
+                    const url = id === 'chat' ? '/' : '/?tab=' + id;
+                    window.history.replaceState({}, '', url);
+                    // Auto-load data for tabs that need it
+                    if (id === 'triage' && !this.triage.data) {
+                        this.$nextTick(() => this.triageLoad());
+                    }
+                },
+
+                authHeaders() {
+                    const h = { 'Content-Type': 'application/json' };
+                    if (this.settings.apiKey) h['Authorization'] = 'Bearer ' + this.settings.apiKey;
+                    return h;
+                },
+
+                parseTags(str) {
+                    return str.trim() ? str.split(',').map(t => t.trim()).filter(Boolean) : [];
                 },
 
                 saveApiKey() {
@@ -317,31 +844,42 @@
                     else localStorage.removeItem('rag_api_key');
                 },
 
-                async sendMessage() {
-                    const query = this.input.trim();
-                    if (!query || this.loading) return;
+                renderMarkdown(content) {
+                    if (!content) return '<span class="opacity-50 italic">Thinking...</span>';
+                    return DOMPurify.sanitize(marked.parse(content));
+                },
 
-                    this.messages.push({ role: 'user', content: query });
-                    const assistantMsgIndex = this.messages.push({ 
-                        role: 'assistant', 
-                        content: '', 
-                        chunks: [],
-                        queryContext: query, // Store the query directly for feedback
-                        feedbackSent: false 
+                formatDate(dateStr) {
+                    if (!dateStr) return 'unknown';
+                    const d = new Date(dateStr);
+                    return d.getFullYear() + '/' + (d.getMonth() + 1);
+                },
+
+                formatFullDate(dateStr) {
+                    if (!dateStr) return 'Unknown Date';
+                    return new Date(dateStr).toLocaleString('en-US');
+                },
+
+                // ── Chat methods ──
+                async chatSend() {
+                    const query = this.chat.input.trim();
+                    if (!query || this.chat.loading) return;
+
+                    this.chat.messages.push({ role: 'user', content: query });
+                    const idx = this.chat.messages.push({
+                        role: 'assistant', content: '', chunks: [],
+                        queryContext: query, feedbackSent: false,
                     }) - 1;
-                    
-                    this.input = '';
-                    this.loading = true;
-                    this.loadingStatus = 'Searching knowledge base...';
 
-                    this.scrollToBottom();
+                    this.chat.input = '';
+                    this.chat.loading = true;
+                    this.chat.loadingStatus = 'Searching knowledge base...';
+                    this.chatScrollToBottom();
 
                     try {
-                        const headers = { 'Content-Type': 'application/json' };
-                        if (this.settings.apiKey) headers['Authorization'] = 'Bearer ' + this.settings.apiKey;
                         const response = await fetch('/api/query', {
                             method: 'POST',
-                            headers,
+                            headers: this.authHeaders(),
                             body: JSON.stringify({
                                 query,
                                 hybrid: this.settings.hybrid,
@@ -349,10 +887,9 @@
                                 decay: parseInt(this.settings.decay),
                                 visibility: this.settings.visibility,
                                 stream: true,
-                                client: "web-ui"
-                            })
+                                client: 'web-ui',
+                            }),
                         });
-
                         if (!response.ok) throw new Error('API Error');
 
                         const reader = response.body.getReader();
@@ -362,110 +899,267 @@
                         while (true) {
                             const { done, value } = await reader.read();
                             if (done) break;
-
                             buffer += decoder.decode(value, { stream: true });
                             const lines = buffer.split('\n');
                             buffer = lines.pop() || '';
-
                             for (const line of lines) {
                                 if (!line.trim()) continue;
                                 try {
                                     const data = JSON.parse(line);
                                     if (data.type === 'chunks') {
-                                        this.messages[assistantMsgIndex].chunks = data.chunks;
-                                        this.loadingStatus = 'Generating answer...';
+                                        this.chat.messages[idx].chunks = data.chunks;
+                                        this.chat.loadingStatus = 'Generating answer...';
                                     } else if (data.type === 'text') {
-                                        this.messages[assistantMsgIndex].content += data.text;
+                                        this.chat.messages[idx].content += data.text;
                                     } else if (data.type === 'error') {
-                                        this.messages[assistantMsgIndex].content = 'Error: ' + data.error;
+                                        this.chat.messages[idx].content = 'Error: ' + data.error;
                                     }
-                                    this.scrollToBottom();
-                                } catch (e) {
-                                    console.error('Parse error', e, line);
-                                }
+                                    this.chatScrollToBottom();
+                                } catch (e) { console.error('Parse error', e, line); }
                             }
                         }
                     } catch (err) {
-                        this.messages[assistantMsgIndex].content = !this.settings.apiKey
+                        this.chat.messages[idx].content = !this.settings.apiKey
                             ? 'Please configure your API Key in Settings first.'
                             : 'An error occurred. Please try again later.';
                     } finally {
-                        this.loading = false;
-                        this.scrollToBottom();
+                        this.chat.loading = false;
+                        this.chatScrollToBottom();
                     }
                 },
 
-                renderMarkdown(content) {
-                    if (!content) return '<span class="opacity-50 italic">Thinking...</span>';
-                    return DOMPurify.sanitize(marked.parse(content));
-                },
-
-                scrollToBottom() {
+                chatScrollToBottom() {
                     this.$nextTick(() => {
                         const el = document.getElementById('chat-messages');
-                        el.scrollTop = el.scrollHeight;
+                        if (el) el.scrollTop = el.scrollHeight;
                     });
                 },
 
-                showSource(chunk) {
-                    this.selectedSource = chunk;
+                async chatSendFeedback(msg, score) {
+                    if (!msg || msg.feedbackSent) return;
+                    try {
+                        const res = await fetch('/api/feedback', {
+                            method: 'POST',
+                            headers: this.authHeaders(),
+                            body: JSON.stringify({
+                                query: msg.queryContext, answer: msg.content,
+                                chunks: msg.chunks ? msg.chunks.map(c => c.id) : [],
+                                score,
+                            }),
+                        });
+                        if (res.ok) msg.feedbackSent = true;
+                    } catch (err) { console.error('Failed to send feedback', err); }
                 },
 
-                async sendFeedback(msg, score) {
-                    if (!msg || msg.feedbackSent) return;
-                    
+                openReport(chunkId, query) {
+                    this.report.form.chunk_id = chunkId || '';
+                    this.report.form.query = query || '';
+                    this.report.form.type = 'outdated';
+                    this.report.submitted = false;
+                    this.report.error = '';
+                    this.switchTab('report');
+                },
+
+                // ── Report methods ──
+                async reportSubmit() {
+                    this.report.error = '';
+                    this.report.submitting = true;
                     try {
-                        const fbHeaders = { 'Content-Type': 'application/json' };
-                        if (this.settings.apiKey) fbHeaders['Authorization'] = 'Bearer ' + this.settings.apiKey;
-                        const response = await fetch('/api/feedback', {
-                            method: 'POST',
-                            headers: fbHeaders,
-                            body: JSON.stringify({
-                                query: msg.queryContext,
-                                answer: msg.content,
-                                chunks: msg.chunks ? msg.chunks.map(c => c.id) : [],
-                                score: score
-                            })
+                        const body = { type: this.report.form.type, detail: this.report.form.detail };
+                        if (this.report.form.chunk_id.trim()) body.chunk_id = this.report.form.chunk_id.trim();
+                        if (this.report.form.query.trim()) body.query = this.report.form.query.trim();
+                        const res = await fetch('/api/report', {
+                            method: 'POST', headers: this.authHeaders(),
+                            body: JSON.stringify(body),
                         });
-                        
-                        if (response.ok) {
-                            msg.feedbackSent = true;
+                        if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            throw new Error(data.error || 'HTTP ' + res.status);
                         }
+                        this.report.submitted = true;
                     } catch (err) {
-                        console.error('Failed to send feedback', err);
+                        this.report.error = 'Submission failed: ' + err.message;
+                    } finally {
+                        this.report.submitting = false;
                     }
                 },
 
-                copyCode(btn) {
-                    const pre = btn.parentElement;
-                    const code = pre.querySelector('code').innerText;
-                    navigator.clipboard.writeText(code);
-                    btn.innerText = 'Copied!';
-                    setTimeout(() => btn.innerText = 'Copy', 2000);
+                reportReset() {
+                    this.report.form = { type: 'outdated', chunk_id: '', query: '', detail: '' };
+                    this.report.submitted = false;
+                    this.report.error = '';
                 },
 
-                formatDate(dateStr) {
-                    if (!dateStr) return 'unknown';
-                    const date = new Date(dateStr);
-                    return `${date.getFullYear()}/${date.getMonth() + 1}`;
+                // ── Learn methods ──
+                async learnSubmit() {
+                    this.learn.error = '';
+                    this.learn.submitting = true;
+                    try {
+                        const tags = this.parseTags(this.learn.form.tags);
+                        const body = { title: this.learn.form.title, content: this.learn.form.content, tags };
+                        if (this.learn.form.source_query.trim()) body.source_query = this.learn.form.source_query.trim();
+                        const res = await fetch('/api/learn', {
+                            method: 'POST', headers: this.authHeaders(),
+                            body: JSON.stringify(body),
+                        });
+                        if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            throw new Error(data.error || 'HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.learn.id = data.id;
+                    } catch (err) {
+                        this.learn.error = 'Submission failed: ' + err.message;
+                    } finally {
+                        this.learn.submitting = false;
+                    }
                 },
 
-                formatFullDate(dateStr) {
-                    if (!dateStr) return 'Unknown Date';
-                    return new Date(dateStr).toLocaleString('en-US');
-                }
+                async learnCopyId() {
+                    try {
+                        await navigator.clipboard.writeText(this.learn.id);
+                        this.learn.copied = true;
+                        setTimeout(() => this.learn.copied = false, 2000);
+                    } catch (err) {}
+                },
+
+                learnReset() {
+                    this.learn.form = { title: '', content: '', tags: '', source_query: '' };
+                    this.learn.id = '';
+                    this.learn.error = '';
+                    this.learn.copied = false;
+                },
+
+                // ── Inspect methods ──
+                async inspectLoad() {
+                    const id = this.inspect.idInput.trim();
+                    if (!id) return;
+                    this.inspect.loading = true;
+                    this.inspect.error = '';
+                    this.inspect.data = null;
+                    try {
+                        const res = await fetch('/api/admin/chunks/' + encodeURIComponent(id), { headers: this.authHeaders() });
+                        if (!res.ok) {
+                            const d = await res.json().catch(() => ({}));
+                            throw new Error(d.error || 'HTTP ' + res.status);
+                        }
+                        this.inspect.data = await res.json();
+                    } catch (err) {
+                        this.inspect.error = err.message;
+                    } finally {
+                        this.inspect.loading = false;
+                    }
+                },
+
+                inspectChunk(id) {
+                    this.inspect.idInput = id;
+                    this.switchTab('inspect');
+                    this.$nextTick(() => this.inspectLoad());
+                },
+
+                // ── Triage methods ──
+                async triageLoad() {
+                    this.triage.loading = true;
+                    this.triage.error = '';
+                    try {
+                        const res = await fetch('/api/admin/triage?days=14&limit=20', { headers: this.authHeaders() });
+                        if (!res.ok) {
+                            const d = await res.json().catch(() => ({}));
+                            throw new Error(d.error || 'HTTP ' + res.status);
+                        }
+                        this.triage.data = await res.json();
+                    } catch (err) {
+                        this.triage.error = err.message;
+                    } finally {
+                        this.triage.loading = false;
+                    }
+                },
+
+                // ── Edit methods ──
+                startEdit(chunk) {
+                    this.edit.chunkId = chunk.id;
+                    this.edit.idInput = chunk.id;
+                    this.edit.form.title = chunk.title || '';
+                    this.edit.form.question = chunk.question || '';
+                    this.edit.form.answer = chunk.answer || '';
+                    this.edit.form.tags = (chunk.tags || []).join(', ');
+                    this.edit.form.status = chunk.status || 'unverified';
+                    this.edit.form.visibility = chunk.visibility || 'public';
+                    this.edit.error = '';
+                    this.edit.success = false;
+                    this.switchTab('edit');
+                },
+
+                async editLoadChunk() {
+                    const id = this.edit.idInput.trim();
+                    if (!id) return;
+                    this.edit.loading = true;
+                    this.edit.error = '';
+                    try {
+                        const res = await fetch('/api/admin/chunks/' + encodeURIComponent(id), { headers: this.authHeaders() });
+                        if (!res.ok) {
+                            const d = await res.json().catch(() => ({}));
+                            throw new Error(d.error || 'HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.startEdit(data.chunk);
+                    } catch (err) {
+                        this.edit.error = err.message;
+                    } finally {
+                        this.edit.loading = false;
+                    }
+                },
+
+                async editSubmit() {
+                    this.edit.saving = true;
+                    this.edit.error = '';
+                    this.edit.success = false;
+                    try {
+                        const tags = this.parseTags(this.edit.form.tags);
+                        const textContent = [this.edit.form.title, this.edit.form.question, this.edit.form.answer].filter(Boolean).join('\n\n');
+                        const body = {
+                            title: this.edit.form.title,
+                            question: this.edit.form.question,
+                            answer: this.edit.form.answer,
+                            text_content: textContent,
+                            tags,
+                            status: this.edit.form.status,
+                            visibility: this.edit.form.visibility,
+                        };
+                        const res = await fetch('/api/admin/chunks/' + encodeURIComponent(this.edit.chunkId), {
+                            method: 'PATCH', headers: this.authHeaders(),
+                            body: JSON.stringify(body),
+                        });
+                        if (!res.ok) {
+                            const d = await res.json().catch(() => ({}));
+                            throw new Error(d.error || 'HTTP ' + res.status);
+                        }
+                        this.edit.success = true;
+                    } catch (err) {
+                        this.edit.error = 'Save failed: ' + err.message;
+                    } finally {
+                        this.edit.saving = false;
+                    }
+                },
+
+                editReset() {
+                    this.edit.chunkId = '';
+                    this.edit.idInput = '';
+                    this.edit.error = '';
+                    this.edit.success = false;
+                    this.edit.form = { title: '', question: '', answer: '', tags: '', status: '', visibility: '' };
+                },
             }
         }
 
-        // Add copy button to pre blocks after marked renders
+        // Copy button for code blocks
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('copy-btn')) {
-                const pre = e.target.parentElement;
-                const code = pre.querySelector('code').innerText;
+                const code = e.target.parentElement.querySelector('code').innerText;
                 navigator.clipboard.writeText(code);
-                const originalText = e.target.innerText;
+                const orig = e.target.innerText;
                 e.target.innerText = 'Copied!';
-                setTimeout(() => e.target.innerText = originalText, 2000);
+                setTimeout(() => e.target.innerText = orig, 2000);
             }
         });
     </script>

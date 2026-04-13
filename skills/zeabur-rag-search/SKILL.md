@@ -34,7 +34,7 @@ curl -s -X POST "$ZEABUR_RAG_URL/api/query" \
 
 **Always pass `client: "claude-code"` when calling from Claude Code** so queries are trackable in the dashboard.
 
-Response includes `chunks[]` (each with `id`, `title`, `answer`, `tags`, `similarity`, `source`, `verified`) and `signal_id` for linking feedback.
+Response includes `chunks[]` (each with `id`, `title`, `answer`, `tags`, `similarity` (relevance score), `source`, `verified`) and `signal_id` for linking feedback. Note: `similarity` is an RRF score in hybrid mode (~0–0.02) or cosine similarity in semantic mode (0–1). The scale depends on the search mode — do not compare values across modes.
 
 ## Tips
 

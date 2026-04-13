@@ -1182,9 +1182,13 @@ const server = serve({
       "/": "ui/index.html",
       "/index.html": "ui/index.html",
       "/dashboard": "ui/dashboard.html",
-      "/report": "ui/report.html",
-      "/learn": "ui/learn.html",
     };
+    // Redirect old standalone pages to tabbed UI
+    if (url.pathname === "/report" || url.pathname === "/learn") {
+      const tab = url.pathname.slice(1);
+      const qs = url.search ? "&" + url.searchParams.toString() : "";
+      return Response.redirect(new URL("/?tab=" + tab + qs, url.origin), 302);
+    }
     if (url.pathname in uiRoutes) {
       if (!checkBasicAuth(req)) return unauthorizedResponse();
       return new Response(Bun.file(uiRoutes[url.pathname]), {

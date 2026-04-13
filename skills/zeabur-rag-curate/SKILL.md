@@ -15,7 +15,7 @@ Auth: `Authorization: Bearer $RAG_API_KEY` — **admin scope required**
 ## Loop
 
 1. **Call `zeabur-rag-triage`** to get the pending items list.
-2. **Present results** as a numbered list grouped by category (🔴 Reports, 🟡 Unverified, 🟠 Low-similarity, 🔵 Negative feedback). Show counts.
+2. **Present results** as a numbered list grouped by category (🔴 Reports, 🟡 Unverified, 🟠 Low-score, 🔵 Negative feedback, ⚪ Needs-frontmatter). Show counts.
 3. **If all categories are empty:** tell the user "The knowledge base has no pending items — looks healthy ✅" and stop.
 4. **Wait for user** to pick an item by number or description.
 5. **Run the decision tree** for that item type (see below).
@@ -51,7 +51,7 @@ Auth: `Authorization: Bearer $RAG_API_KEY` — **admin scope required**
 | Correct but needs polish | `zeabur-rag-edit` to fix → then verify |
 | Low quality or wrong | Reject (see Inline commands) |
 
-### 🟠 Low-similarity signal
+### 🟠 Low-score signal
 
 1. Call `zeabur-rag-search` with the original query to confirm the gap.
 2. Classify:
@@ -75,6 +75,30 @@ Auth: `Authorization: Bearer $RAG_API_KEY` — **admin scope required**
 | Answer was right but user query was ambiguous | Dismiss — no action |
 | No chunks to inspect (null top_chunk_ids) | Treat as knowledge gap → `zeabur-rag-learn` |
 
+### ⚪ Needs-frontmatter
+
+A chunk was ingested from a source file that has no frontmatter. Its ID is a
+temporary path-hash (`MAN-tmp-*`), and it is excluded from some reorg-safety
+guarantees. The fix is to add frontmatter to the source file in the origin
+repo (e.g. `zebra-manual`), then re-ingest.
+
+1. Call `zeabur-rag-inspect` to show the chunk's `url` and content.
+2. Tell the user which file to edit (the `url` field points at the repo-relative
+   path, e.g. `docs/customer-support/xxx.md`).
+3. Direct them to the backfill tool in the origin repo. For `zebra-manual`, that
+   tool lives in `zebra-manual/scripts/` and walks through one file at a time
+   with LLM-drafted frontmatter + human confirmation.
+4. After the user finishes adding frontmatter, tell them to re-run the pipeline:
+   `bun run pipeline --adapter zebra-manual --input /path/to/zebra-manual/docs`
+5. The adapter's reverse-lookup will automatically delete the old `tmp-*` chunks
+   and insert the new permanent-ID chunks in place. No manual DB surgery.
+
+| Classification | Action |
+|---------------|--------|
+| File is real and worth keeping | User adds frontmatter in origin repo → re-ingest |
+| File is not worth keeping in KB | Reject the chunk (see Inline commands); user also deletes the source file |
+| File is a duplicate of another chunk | Reject this chunk; point user at the canonical one |
+
 ## Inline commands
 
 These actions don't have dedicated skills. Execute them as direct API calls:
@@ -86,7 +110,7 @@ curl -s -X POST "$ZEABUR_RAG_URL/api/admin/learned/<id>/verify" \
   -H "Authorization: Bearer $RAG_API_KEY"
 ```
 
-Returns `{"success": true}`. The chunk now ranks at full weight in search (unverified `learned` chunks are downranked to ×0.7 similarity).
+Returns `{"success": true}`. The chunk now ranks at full weight in search (unverified `learned` chunks are downranked to ×0.7 score).
 
 ### Reject a learned chunk (soft delete)
 
