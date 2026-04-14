@@ -128,8 +128,7 @@ curl -X POST "https://your-rag-service/api/learn" \
 Add the marketplace and install the plugin:
 
 ```bash
-claude plugins marketplace add zeabur/rag-service
-claude plugins install rag-service@rag-service
+claude plugin marketplace add zeabur/rag-service && claude plugin install rag-service@rag-service
 ```
 
 Then configure the connection:
