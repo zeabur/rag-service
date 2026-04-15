@@ -3,8 +3,8 @@
 import { createHash, randomBytes } from "crypto";
 
 export const VALID_SCOPES = [
-  "read:public", "read:internal",
-  "write:learn", "write:report", "write:feedback",
+  "query",
+  "learn", "report", "feedback",
   "admin",
 ] as const;
 
