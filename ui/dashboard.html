@@ -765,7 +765,7 @@
             </div>
           </div>
           <p class="text-sm text-orange-600 font-medium mb-4">This key will only be shown once. Copy it now.</p>
-          <button @click="newKeyResult = null; showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '' }"
+          <button @click="newKeyResult = null; showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '', sources: { read: [], write: [] } }"
             class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Close</button>
         </div>
       </div>
@@ -782,45 +782,63 @@
 
           <div class="mb-4">
             <label class="block text-xs font-medium text-gray-500 mb-2">Scopes</label>
-            <div class="flex flex-wrap gap-2 mb-2">
-              <button @click="setPresetScopes('external')" class="text-xs px-2 py-1 border rounded-full hover:bg-gray-50">External Read-Only</button>
-              <button @click="setPresetScopes('agent')" class="text-xs px-2 py-1 border rounded-full hover:bg-gray-50">Internal Agent</button>
-              <button @click="setPresetScopes('admin')" class="text-xs px-2 py-1 border rounded-full hover:bg-gray-50">Admin</button>
-            </div>
             <div class="space-y-2">
-              <div class="text-xs text-gray-400 font-medium">Read</div>
-              <div class="flex flex-wrap gap-2 ml-2">
+              <div class="flex flex-wrap gap-2">
                 <label class="flex items-center space-x-1.5 text-sm">
-                  <input type="checkbox" :checked="newKey.scopes.includes('read:public')" @change="toggleScope('read:public')">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">read:public</span>
+                  <input type="checkbox" :checked="newKey.scopes.includes('query')" @change="toggleScope('query')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">query</span>
                 </label>
                 <label class="flex items-center space-x-1.5 text-sm">
-                  <input type="checkbox" :checked="newKey.scopes.includes('read:internal')" @change="toggleScope('read:internal')">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">read:internal</span>
-                </label>
-              </div>
-              <div class="text-xs text-gray-400 font-medium">Write</div>
-              <div class="flex flex-wrap gap-2 ml-2">
-                <label class="flex items-center space-x-1.5 text-sm">
-                  <input type="checkbox" :checked="newKey.scopes.includes('write:learn')" @change="toggleScope('write:learn')">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">write:learn</span>
+                  <input type="checkbox" :checked="newKey.scopes.includes('learn')" @change="toggleScope('learn')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">learn</span>
                 </label>
                 <label class="flex items-center space-x-1.5 text-sm">
-                  <input type="checkbox" :checked="newKey.scopes.includes('write:report')" @change="toggleScope('write:report')">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">write:report</span>
+                  <input type="checkbox" :checked="newKey.scopes.includes('report')" @change="toggleScope('report')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">report</span>
                 </label>
                 <label class="flex items-center space-x-1.5 text-sm">
-                  <input type="checkbox" :checked="newKey.scopes.includes('write:feedback')" @change="toggleScope('write:feedback')">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700">write:feedback</span>
+                  <input type="checkbox" :checked="newKey.scopes.includes('feedback')" @change="toggleScope('feedback')">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700">feedback</span>
                 </label>
-              </div>
-              <div class="text-xs text-gray-400 font-medium">Admin</div>
-              <div class="flex flex-wrap gap-2 ml-2">
                 <label class="flex items-center space-x-1.5 text-sm">
                   <input type="checkbox" :checked="newKey.scopes.includes('admin')" @change="toggleScope('admin')">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">admin</span>
                 </label>
               </div>
+            </div>
+          </div>
+
+          <!-- Source permissions (hidden when admin is selected) -->
+          <div class="mb-4" x-show="!newKey.scopes.includes('admin') && sources.length > 0">
+            <label class="block text-xs font-medium text-gray-500 mb-2">Source Permissions</label>
+            <div class="border rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-xs text-gray-500">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-medium">Source</th>
+                    <th class="px-3 py-2 text-center font-medium w-20">Read</th>
+                    <th class="px-3 py-2 text-center font-medium w-20">Write</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <template x-for="src in sources" :key="src.name">
+                    <tr>
+                      <td class="px-3 py-2">
+                        <div class="font-medium text-gray-700" x-text="src.display_name || src.name"></div>
+                        <div class="text-xs text-gray-400" x-text="src.name"></div>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <input type="checkbox" :checked="newKey.sources.read.includes(src.name)"
+                          @change="toggleSource('read', src.name)">
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <input type="checkbox" :checked="newKey.sources.write.includes(src.name)"
+                          @change="toggleSource('write', src.name)">
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -843,7 +861,7 @@
             <button @click="createApiKey()" :disabled="!newKey.name || newKey.scopes.length === 0"
               :class="!newKey.name || newKey.scopes.length === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-indigo-700'"
               class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm transition">Create</button>
-            <button @click="showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '' }"
+            <button @click="showCreateKey = false; newKey = { name: '', scopes: [], client: '', expires: '', sources: { read: [], write: [] } }"
               class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Cancel</button>
           </div>
         </div>
@@ -852,7 +870,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-sm font-medium text-gray-500">Manage API Keys</h2>
-        <button @click="showCreateKey = true" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">Create Key</button>
+        <button @click="showCreateKey = true; loadSources()" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">Create Key</button>
       </div>
 
       <!-- Keys table -->
@@ -1207,7 +1225,8 @@
         apiKeys: [],
         showCreateKey: false,
         newKeyResult: null,
-        newKey: { name: '', scopes: [], client: '', expires: '' },
+        newKey: { name: '', scopes: [], client: '', expires: '', sources: { read: [], write: [] } },
+        sources: [],
 
         // Detail panel
         detailOpen: false,
@@ -1620,9 +1639,34 @@
           finally { this.loading = false; }
         },
 
+        async loadSources() {
+          try {
+            const res = await this.apiFetch('/api/admin/sources');
+            this.sources = res.data || [];
+          } catch (e) { this.error = e.message; }
+        },
+
+        toggleSource(action, name) {
+          const list = this.newKey.sources[action];
+          const idx = list.indexOf(name);
+          if (idx >= 0) list.splice(idx, 1);
+          else list.push(name);
+        },
+
         async createApiKey() {
           try {
-            const body = { name: this.newKey.name, scopes: this.newKey.scopes, client: this.newKey.client || undefined };
+            const isAdmin = this.newKey.scopes.includes('admin');
+            const body = {
+              name: this.newKey.name,
+              scopes: this.newKey.scopes,
+              client: this.newKey.client || undefined,
+            };
+            if (!isAdmin) {
+              body.sources = {
+                read: this.newKey.scopes.includes('query') ? this.newKey.sources.read : [],
+                write: this.newKey.scopes.includes('learn') ? this.newKey.sources.write : [],
+              };
+            }
             if (this.newKey.expires) body.expires_in_days = parseInt(this.newKey.expires);
             const res = await this.apiFetch('/api/admin/keys', { method: 'POST', body: JSON.stringify(body) });
             this.newKeyResult = res;
@@ -1648,11 +1692,10 @@
 
         scopeBadgeClass(scope) {
           return {
-            'read:public': 'bg-blue-100 text-blue-700',
-            'read:internal': 'bg-indigo-100 text-indigo-700',
-            'write:learn': 'bg-green-100 text-green-700',
-            'write:report': 'bg-orange-100 text-orange-700',
-            'write:feedback': 'bg-cyan-100 text-cyan-700',
+            'query': 'bg-blue-100 text-blue-700',
+            'learn': 'bg-green-100 text-green-700',
+            'report': 'bg-orange-100 text-orange-700',
+            'feedback': 'bg-cyan-100 text-cyan-700',
             'admin': 'bg-red-100 text-red-700',
           }[scope] || 'bg-gray-100 text-gray-600';
         },
@@ -1661,12 +1704,6 @@
           const idx = this.newKey.scopes.indexOf(scope);
           if (idx >= 0) this.newKey.scopes.splice(idx, 1);
           else this.newKey.scopes.push(scope);
-        },
-
-        setPresetScopes(preset) {
-          if (preset === 'external') this.newKey.scopes = ['read:public'];
-          else if (preset === 'agent') this.newKey.scopes = ['read:internal', 'write:learn', 'write:report', 'write:feedback'];
-          else if (preset === 'admin') this.newKey.scopes = ['read:public', 'read:internal', 'write:learn', 'write:report', 'write:feedback', 'admin'];
         },
 
         auditActionBadge(action) {

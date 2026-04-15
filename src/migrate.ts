@@ -216,10 +216,11 @@ export async function runMigrations() {
     $fn$
   `, "UPDATE FUNCTION match_chunks (with visibility + rejected filter)");
 
-  // 7. API Keys table
+  // 7. API Keys table (v2 schema — same columns as legacy rag_api_keys,
+  // but named v2 to stay aligned with zeabur-rag for future diffs)
   console.error("\n=== 7. API Keys Table ===");
   await runSQL(`
-    CREATE TABLE IF NOT EXISTS rag_api_keys (
+    CREATE TABLE IF NOT EXISTS rag_api_keys_v2 (
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
       name TEXT NOT NULL,
       key_hash TEXT NOT NULL UNIQUE,
@@ -231,13 +232,13 @@ export async function runMigrations() {
       last_used_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT now()
     )
-  `, "CREATE TABLE rag_api_keys");
+  `, "CREATE TABLE rag_api_keys_v2");
   await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON rag_api_keys(key_hash)`,
+    `CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON rag_api_keys_v2(key_hash)`,
     "INDEX api_keys(key_hash)"
   );
   await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON rag_api_keys(key_prefix)`,
+    `CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON rag_api_keys_v2(key_prefix)`,
     "INDEX api_keys(key_prefix)"
   );
 
@@ -295,6 +296,48 @@ export async function runMigrations() {
   await runSQL(
     `ALTER TABLE rag_query_signals ADD COLUMN IF NOT EXISTS key_prefix TEXT`,
     "ADD COLUMN key_prefix on signals"
+  );
+
+  // 11. Sources catalogue — lists which content domains exist.
+  // API key permissions reference rows here. Seed with a minimal set so a
+  // fresh install has working source-based ACL out of the box; operators
+  // can add more via UI or direct SQL.
+  console.error("\n=== 11. Sources Catalogue ===");
+  await runSQL(`
+    CREATE TABLE IF NOT EXISTS rag_sources (
+      name         TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      description  TEXT,
+      created_at   TIMESTAMPTZ DEFAULT now()
+    )
+  `, "CREATE TABLE rag_sources");
+  await runSQL(`
+    INSERT INTO rag_sources (name, display_name, description) VALUES
+      ('docs',    'Docs',    'General documentation'),
+      ('learned', 'Learned', 'Agent-contributed knowledge via /api/learn')
+    ON CONFLICT (name) DO NOTHING
+  `, "SEED rag_sources");
+
+  // 12. API key → source permissions (per-action ACL).
+  // admin-scoped keys bypass this table; non-admin keys must have explicit
+  // (source, action) rows to access a source.
+  console.error("\n=== 12. API Key Source Permissions ===");
+  await runSQL(`
+    CREATE TABLE IF NOT EXISTS rag_api_key_source_permissions (
+      key_id     UUID NOT NULL REFERENCES rag_api_keys_v2(id) ON DELETE CASCADE,
+      source     TEXT NOT NULL REFERENCES rag_sources(name) ON DELETE CASCADE,
+      action     TEXT NOT NULL CHECK (action IN ('read', 'write', 'delete')),
+      created_at TIMESTAMPTZ DEFAULT now(),
+      PRIMARY KEY (key_id, source, action)
+    )
+  `, "CREATE TABLE rag_api_key_source_permissions");
+  await runSQL(
+    `CREATE INDEX IF NOT EXISTS idx_key_source_perms_key_id ON rag_api_key_source_permissions(key_id)`,
+    "INDEX key_source_perms(key_id)"
+  );
+  await runSQL(
+    `CREATE INDEX IF NOT EXISTS idx_key_source_perms_source ON rag_api_key_source_permissions(source)`,
+    "INDEX key_source_perms(source)"
   );
 
   console.error("\n=== Migration Complete ===");

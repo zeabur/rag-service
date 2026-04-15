@@ -45,10 +45,13 @@ export function buildLearnedChunkRow(input: {
   content: string;
   tags?: string[];
   source_query?: string;
+  source?: string;
 }): ChunkRow {
+  const source = input.source ?? "learned";
   const timestamp = Date.now();
   const hash = createHash("sha256").update(input.content).digest("hex").slice(0, 6);
-  const id = `LEARNED-${timestamp}-${hash}`;
+  const sourcePrefix = source.toUpperCase().replace(/-/g, "_");
+  const id = `${sourcePrefix}-${timestamp}-${hash}`;
 
   return {
     id,
@@ -57,7 +60,7 @@ export function buildLearnedChunkRow(input: {
     answer: input.content,
     text_content: `${input.title}\n${input.content}`,
     tags: input.tags || [],
-    source: "learned",
+    source,
     parent_id: null,
     created_at: new Date().toISOString(),
     verified: false,

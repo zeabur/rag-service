@@ -24,11 +24,19 @@ await runMigrations().catch(err => {
 const PORT = process.env.PORT || 3000;
 const FEEDBACK_PATH = "data/user-feedback.jsonl";
 const RAG_API_KEY = process.env.RAG_API_KEY;
+const API_KEYS_TABLE = "rag_api_keys_v2" as const;
 // Format: "username:password"
 const RAG_BASIC_AUTH = process.env.RAG_BASIC_AUTH;
 
-// Key cache: hash → { row, cachedAt }
-const keyCache = new Map<string, { row: ApiKeyRow; cachedAt: number }>();
+interface CachedKeyEntry {
+  row: ApiKeyRow;
+  sourcesCanRead: string[] | null;
+  sourcesCanWrite: string[] | null;
+  sourcesCanDelete: string[] | null;
+  cachedAt: number;
+}
+// Key cache: hash → { row, permissions, cachedAt }
+const keyCache = new Map<string, CachedKeyEntry>();
 const KEY_CACHE_TTL = 5 * 60 * 1000; // 5 min
 
 // Debounce last_used_at updates: at most once per 60s per key
@@ -45,11 +53,11 @@ function updateLastUsed(row: ApiKeyRow) {
   const last = lastUsedUpdated.get(row.id);
   if (last && now - last < LAST_USED_DEBOUNCE) return;
   lastUsedUpdated.set(row.id, now);
-  insforge.database.from("rag_api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", row.id)
-    .then(() => {})
-    .catch((err: any) => console.error("[Auth] last_used_at update failed:", err));
+  Promise.resolve(
+    insforge.database.from(API_KEYS_TABLE)
+      .update({ last_used_at: new Date().toISOString() })
+      .eq("id", row.id)
+  ).catch((err: any) => console.error("[Auth] last_used_at update failed:", err));
 }
 
 interface AuthResult {
@@ -57,6 +65,9 @@ interface AuthResult {
   scopes: string[];
   keyPrefix: string | null;
   client: string | null;
+  sourcesCanRead: string[] | null;   // null = admin (all sources)
+  sourcesCanWrite: string[] | null;  // null = admin (all sources)
+  sourcesCanDelete: string[] | null; // null = admin (all sources)
   error?: string;
   status?: number; // 401 or 403
 }
@@ -67,12 +78,13 @@ async function authenticateRequest(req: Request): Promise<AuthResult> {
   const providedKey = apiKeyHeader || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
 
   if (!providedKey) {
-    return { authenticated: false, scopes: [], keyPrefix: null, client: null, error: "Unauthorized", status: 401 };
+    return { authenticated: false, scopes: [], keyPrefix: null, client: null, sourcesCanRead: null, sourcesCanWrite: null, sourcesCanDelete: null, error: "Unauthorized", status: 401 };
   }
 
   // Fast path: check legacy RAG_API_KEY first (cheap string compare, no hash/DB)
   if (RAG_API_KEY && providedKey === RAG_API_KEY) {
-    return { authenticated: true, scopes: [...VALID_SCOPES], keyPrefix: null, client: null };
+    return { authenticated: true, scopes: [...VALID_SCOPES], keyPrefix: null, client: null,
+             sourcesCanRead: null, sourcesCanWrite: null, sourcesCanDelete: null };
   }
 
   const hash = hashKey(providedKey);
@@ -81,10 +93,12 @@ async function authenticateRequest(req: Request): Promise<AuthResult> {
   let row: ApiKeyRow | null = null;
   const cached = keyCache.get(hash);
   if (cached && Date.now() - cached.cachedAt < KEY_CACHE_TTL) {
-    row = cached.row;
+    updateLastUsed(cached.row);
+    return { authenticated: true, scopes: cached.row.scopes, keyPrefix: cached.row.key_prefix, client: cached.row.client,
+             sourcesCanRead: cached.sourcesCanRead, sourcesCanWrite: cached.sourcesCanWrite, sourcesCanDelete: cached.sourcesCanDelete };
   } else {
     const { data } = await insforge.database
-      .from("rag_api_keys")
+      .from(API_KEYS_TABLE)
       .select("id, name, key_hash, key_prefix, scopes, client, expires_at, revoked_at, last_used_at")
       .eq("key_hash", hash)
       .single();
@@ -92,24 +106,46 @@ async function authenticateRequest(req: Request): Promise<AuthResult> {
   }
 
   if (!row) {
-    return { authenticated: false, scopes: [], keyPrefix: null, client: null, error: "Unauthorized", status: 401 };
+    return { authenticated: false, scopes: [], keyPrefix: null, client: null, sourcesCanRead: null, sourcesCanWrite: null, sourcesCanDelete: null, error: "Unauthorized", status: 401 };
   }
 
   // Validate key status
   const status = getKeyStatus(row);
   if (status === "revoked") {
     keyCache.delete(hash); // Don't cache revoked keys
-    return { authenticated: false, scopes: [], keyPrefix: row.key_prefix, client: row.client, error: "Key has been revoked", status: 401 };
+    return { authenticated: false, scopes: [], keyPrefix: row.key_prefix, client: row.client, sourcesCanRead: null, sourcesCanWrite: null, sourcesCanDelete: null, error: "Key has been revoked", status: 401 };
   }
   if (status === "expired") {
     keyCache.delete(hash); // Don't cache expired keys
-    return { authenticated: false, scopes: [], keyPrefix: row.key_prefix, client: row.client, error: "Key has expired", status: 401 };
+    return { authenticated: false, scopes: [], keyPrefix: row.key_prefix, client: row.client, sourcesCanRead: null, sourcesCanWrite: null, sourcesCanDelete: null, error: "Key has expired", status: 401 };
   }
 
-  // Cache valid key and update last_used (debounced)
-  keyCache.set(hash, { row, cachedAt: Date.now() });
+  // Determine source permissions (admin → null = all sources)
+  let sourcesCanRead: string[] | null = null;
+  let sourcesCanWrite: string[] | null = null;
+  let sourcesCanDelete: string[] | null = null;
+  const isAdmin = row.scopes.includes("admin");
+  if (!isAdmin) {
+    const { data: perms } = await insforge.database
+      .from("rag_api_key_source_permissions")
+      .select("source, action")
+      .eq("key_id", row.id);
+    if (perms) {
+      sourcesCanRead = (perms as any[]).filter(p => p.action === "read").map(p => p.source);
+      sourcesCanWrite = (perms as any[]).filter(p => p.action === "write").map(p => p.source);
+      sourcesCanDelete = (perms as any[]).filter(p => p.action === "delete").map(p => p.source);
+    } else {
+      sourcesCanRead = [];
+      sourcesCanWrite = [];
+      sourcesCanDelete = [];
+    }
+  }
+
+  // Cache valid key with permissions and update last_used (debounced)
+  keyCache.set(hash, { row, sourcesCanRead, sourcesCanWrite, sourcesCanDelete, cachedAt: Date.now() });
   updateLastUsed(row);
-  return { authenticated: true, scopes: row.scopes, keyPrefix: row.key_prefix, client: row.client };
+  return { authenticated: true, scopes: row.scopes, keyPrefix: row.key_prefix, client: row.client,
+           sourcesCanRead, sourcesCanWrite, sourcesCanDelete };
 }
 
 function hasScope(auth: AuthResult, scope: string): boolean {
@@ -268,9 +304,9 @@ const server = serve({
       }
     }
 
-    // API: Feedback (requires write:feedback)
+    // API: Feedback (requires feedback scope)
     if (url.pathname === "/api/feedback" && req.method === "POST") {
-      if (!hasScope(auth, "write:feedback")) return jsonResponse({ error: "Insufficient permissions" }, 403);
+      if (!hasScope(auth, "feedback")) return jsonResponse({ error: "Insufficient permissions" }, 403);
       try {
         const feedback = await req.json();
         const entry = {
@@ -297,9 +333,9 @@ const server = serve({
       }
     }
 
-    // API: Report (requires write:report)
+    // API: Report (requires report scope)
     if (url.pathname === "/api/report" && req.method === "POST") {
-      if (!hasScope(auth, "write:report")) return jsonResponse({ error: "Insufficient permissions" }, 403);
+      if (!hasScope(auth, "report")) return jsonResponse({ error: "Insufficient permissions" }, 403);
       try {
         const body = await req.json();
         const { chunk_id, type, query, detail } = body;
@@ -326,23 +362,30 @@ const server = serve({
       }
     }
 
-    // API: Learn (requires write:learn)
+    // API: Learn (requires learn scope + write permission on target source)
     if (url.pathname === "/api/learn" && req.method === "POST") {
-      if (!hasScope(auth, "write:learn")) return jsonResponse({ error: "Insufficient permissions" }, 403);
+      if (!hasScope(auth, "learn")) return jsonResponse({ error: "Insufficient permissions" }, 403);
       try {
         const body = await req.json();
         const { title, content, tags, source_query } = body;
+        const targetSource: string = body.source ?? "learned";
+
+        // Check write permission on target source
+        const canWrite = auth.sourcesCanWrite === null || auth.sourcesCanWrite.includes(targetSource);
+        if (!canWrite) {
+          return jsonResponse({ error: `Write access to source '${targetSource}' not granted` }, 403);
+        }
 
         if (!title || !content) {
           return jsonResponse({ error: "title and content are required" }, 400);
         }
 
-        const chunkRow = buildLearnedChunkRow({ title, content, tags, source_query });
+        const chunkRow = buildLearnedChunkRow({ title, content, tags, source_query, source: targetSource });
         const [embedding] = await embedTexts([chunkRow.text_content]);
         await insertChunks([chunkRow], [embedding]);
 
         console.log(`[API] Learned chunk indexed: ${chunkRow.id}`);
-        writeAudit({ chunk_id: chunkRow.id, action: "create", new_value: { title, content, tags } });
+        writeAudit({ chunk_id: chunkRow.id, action: "create", actor: auth.client || auth.keyPrefix || undefined, new_value: { title, content, tags } });
         clearBM25Cache();
         return jsonResponse({ id: chunkRow.id, status: "indexed", verified: false });
       } catch (err: any) {
@@ -351,9 +394,33 @@ const server = serve({
       }
     }
 
-    // API: Query (requires read:public or read:internal)
+    // API: Me (returns current key info and source permissions)
+    if (url.pathname === "/api/me" && req.method === "GET") {
+      let sourcesRead = auth.sourcesCanRead;
+      let sourcesWrite = auth.sourcesCanWrite;
+      let sourcesDelete = auth.sourcesCanDelete;
+      if (sourcesRead === null || sourcesWrite === null || sourcesDelete === null) {
+        const { data: allSources } = await insforge.database.from("rag_sources").select("name");
+        const all = (allSources as any[] | null)?.map((r: any) => r.name) ?? [];
+        if (sourcesRead === null) sourcesRead = all;
+        if (sourcesWrite === null) sourcesWrite = all;
+        if (sourcesDelete === null) sourcesDelete = all;
+      }
+      return jsonResponse({
+        name: auth.client || null,
+        keyPrefix: auth.keyPrefix,
+        scopes: auth.scopes,
+        sources: {
+          read: sourcesRead,
+          write: sourcesWrite,
+          delete: sourcesDelete,
+        },
+      });
+    }
+
+    // API: Query (requires query scope)
     if (url.pathname === "/api/query" && req.method === "POST") {
-      if (!hasScope(auth, "read:public") && !hasScope(auth, "read:internal")) {
+      if (!hasScope(auth, "query") && !hasScope(auth, "admin")) {
         return jsonResponse({ error: "Insufficient permissions" }, 403);
       }
       try {
@@ -393,7 +460,7 @@ const server = serve({
         );
 
         const resolvedVisibility = (visibility === "all" || visibility === "internal") ? visibility : "public";
-        if (resolvedVisibility !== "public" && !hasScope(auth, "read:internal")) {
+        if (resolvedVisibility !== "public" && !hasScope(auth, "admin")) {
           return jsonResponse({ error: "Insufficient permissions for internal visibility" }, 403);
         }
         const chunks = await retrieveChunks(query, {
@@ -1087,7 +1154,7 @@ const server = serve({
           // Key stats
           (async () => {
             const { data: keys } = await insforge.database
-              .from("rag_api_keys").select("expires_at, revoked_at");
+              .from(API_KEYS_TABLE).select("expires_at, revoked_at");
             const now = new Date();
             let active = 0, expired = 0, revoked = 0;
             for (const k of (keys || []) as any[]) {
@@ -1105,15 +1172,47 @@ const server = serve({
       }
     }
 
-    // Admin: List API keys
+    // Admin: List API keys (with per-key source permissions)
     if (url.pathname === "/api/admin/keys" && req.method === "GET") {
       try {
         const { data, error, count } = await insforge.database
-          .from("rag_api_keys")
+          .from(API_KEYS_TABLE)
           .select("id, name, key_prefix, scopes, client, expires_at, revoked_at, last_used_at, created_at", { count: "exact" })
           .order("created_at", { ascending: false });
         if (error) return jsonResponse({ error: error.message }, 500);
-        return jsonResponse({ data, total: count });
+
+        const keyIds = (data as any[]).map((k: any) => k.id);
+        const permsMap: Record<string, { read: string[]; write: string[]; delete: string[] }> = {};
+        if (keyIds.length > 0) {
+          const { data: perms } = await insforge.database
+            .from("rag_api_key_source_permissions")
+            .select("key_id, source, action")
+            .in("key_id", keyIds);
+          for (const p of (perms as any[] | null) ?? []) {
+            if (!permsMap[p.key_id]) permsMap[p.key_id] = { read: [], write: [], delete: [] };
+            (permsMap[p.key_id][p.action as "read" | "write" | "delete"] ??= []).push(p.source);
+          }
+        }
+        const keysWithSources = (data as any[]).map((k: any) => ({
+          ...k,
+          sources: permsMap[k.id] ?? { read: [], write: [], delete: [] },
+        }));
+
+        return jsonResponse({ data: keysWithSources, total: count });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
+    // Admin: List available sources (for the key-create UI)
+    if (url.pathname === "/api/admin/sources" && req.method === "GET") {
+      try {
+        const { data, error } = await insforge.database
+          .from("rag_sources")
+          .select("name, display_name, description")
+          .order("name", { ascending: true });
+        if (error) return jsonResponse({ error: error.message }, 500);
+        return jsonResponse({ data });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
@@ -1123,25 +1222,72 @@ const server = serve({
     if (url.pathname === "/api/admin/keys" && req.method === "POST") {
       try {
         const body = await req.json();
-        const { name, scopes, client: keyClient, expires_in_days } = body;
+        const { name, scopes, client: keyClient, expires_in_days, sources } = body;
         if (!name || !Array.isArray(scopes) || scopes.length === 0) {
           return jsonResponse({ error: "name (string) and scopes (non-empty array) are required" }, 400);
         }
         const scopeErr = validateScopes(scopes);
         if (scopeErr) return jsonResponse({ error: scopeErr }, 400);
 
+        // Admin keys are stored with scopes=['admin'] only, no source perms needed
+        const isAdmin = scopes.includes("admin");
+        const storedScopes = isAdmin ? ["admin"] : scopes;
+        const srcRead: string[] = !isAdmin && Array.isArray(sources?.read) ? sources.read : [];
+        const srcWrite: string[] = !isAdmin && Array.isArray(sources?.write) ? sources.write : [];
+        const srcDelete: string[] = !isAdmin && Array.isArray(sources?.delete) ? sources.delete : [];
+
+        // Validate sources exist
+        if (!isAdmin && (srcRead.length || srcWrite.length || srcDelete.length)) {
+          const requestedSources = [...new Set([...srcRead, ...srcWrite, ...srcDelete])];
+          const { data: validSources, error: srcErr } = await insforge.database
+            .from("rag_sources")
+            .select("name")
+            .in("name", requestedSources);
+          if (srcErr) return jsonResponse({ error: srcErr.message }, 500);
+          const validNames = new Set((validSources as any[]).map(s => s.name));
+          const invalid = requestedSources.filter(s => !validNames.has(s));
+          if (invalid.length > 0) {
+            return jsonResponse({ error: `Unknown source(s): ${invalid.join(", ")}` }, 400);
+          }
+        }
+
         const { rawKey, keyHash, keyPrefix } = generateRawKey();
         const expiresAt = computeExpiry(expires_in_days);
 
+        // Default the client to a slugified form of the name when caller didn't set one
+        const slugifiedDefault = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+        const resolvedClient = keyClient || slugifiedDefault;
+
         const { data, error } = await insforge.database
-          .from("rag_api_keys")
-          .insert([{ name, key_hash: keyHash, key_prefix: keyPrefix, scopes, client: keyClient || null, expires_at: expiresAt }])
+          .from(API_KEYS_TABLE)
+          .insert([{ name, key_hash: keyHash, key_prefix: keyPrefix, scopes: storedScopes, client: resolvedClient, expires_at: expiresAt }])
           .select("id, name, key_prefix, scopes, client, expires_at, created_at")
           .single();
 
         if (error) return jsonResponse({ error: error.message }, 500);
+        const keyRow = data as any;
+
+        // Insert source permission rows (non-admin only)
+        if (!isAdmin) {
+          const permRows: { key_id: string; source: string; action: "read" | "write" | "delete" }[] = [];
+          for (const source of srcRead) permRows.push({ key_id: keyRow.id, source, action: "read" });
+          for (const source of srcWrite) permRows.push({ key_id: keyRow.id, source, action: "write" });
+          for (const source of srcDelete) permRows.push({ key_id: keyRow.id, source, action: "delete" });
+          if (permRows.length > 0) {
+            const { error: permErr } = await insforge.database
+              .from("rag_api_key_source_permissions")
+              .insert(permRows);
+            if (permErr) {
+              // Rollback: remove the key row if perm insert fails
+              await insforge.database.from(API_KEYS_TABLE).delete().eq("id", keyRow.id);
+              return jsonResponse({ error: `Failed to set source permissions: ${permErr.message}` }, 500);
+            }
+          }
+        }
+
         console.log(`[Admin] API key created: ${keyPrefix} (${name})`);
-        return jsonResponse({ ...(data as any), key: rawKey });
+        writeAudit({ chunk_id: "", action: "api_key_created", actor: auth.client || auth.keyPrefix || undefined, new_value: { name, key_prefix: keyPrefix, scopes: storedScopes, sources: { read: srcRead, write: srcWrite, delete: srcDelete } } });
+        return jsonResponse({ ...keyRow, key: rawKey, sources: { read: srcRead, write: srcWrite, delete: srcDelete } });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
@@ -1154,17 +1300,18 @@ const server = serve({
         const id = revokeKeyMatch[1];
         // Get key_hash for targeted cache eviction
         const { data: keyRow } = await insforge.database
-          .from("rag_api_keys")
-          .select("key_hash")
+          .from(API_KEYS_TABLE)
+          .select("key_hash, name, key_prefix")
           .eq("id", id)
           .single();
         const { error } = await insforge.database
-          .from("rag_api_keys")
+          .from(API_KEYS_TABLE)
           .update({ revoked_at: new Date().toISOString() })
           .eq("id", id);
         if (error) return jsonResponse({ error: error.message }, 500);
         if (keyRow) clearKeyCache((keyRow as any).key_hash);
         console.log(`[Admin] API key revoked: ${id}`);
+        writeAudit({ chunk_id: "", action: "api_key_revoked", actor: auth.client || auth.keyPrefix || undefined, new_value: { key_id: id, name: (keyRow as any)?.name, key_prefix: (keyRow as any)?.key_prefix } });
         return jsonResponse({ success: true });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
