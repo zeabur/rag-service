@@ -76,6 +76,26 @@ export async function runMigrations() {
     "GIN INDEX kb_chunks(tags)"
   );
 
+  // 0b. Auto-migrate from legacy poc_kb_chunks (pre-v3 installs)
+  // Copies all rows, drops the `visibility` column (retired), preserves embeddings.
+  console.error("\n=== 0b. Legacy poc_kb_chunks Migration ===");
+  await runSQL(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'poc_kb_chunks') THEN
+        INSERT INTO kb_chunks (id, title, question, answer, text_content, tags, embedding, source, parent_id, created_at, fts, verified, url, status)
+        SELECT id, title, question, answer, text_content, tags, embedding,
+               COALESCE(NULLIF(source, ''), 'docs'),
+               parent_id, created_at, fts, verified, url,
+               COALESCE(status, 'unverified')
+        FROM poc_kb_chunks
+        ON CONFLICT (id) DO NOTHING;
+        DROP TABLE poc_kb_chunks;
+        RAISE NOTICE 'Migrated poc_kb_chunks → kb_chunks and dropped legacy table';
+      END IF;
+    END $$
+  `, "MIGRATE poc_kb_chunks → kb_chunks");
+
   // 1. Audit log table
   console.error("=== 1. Audit Log Table ===");
   await runSQL(`
@@ -224,6 +244,35 @@ export async function runMigrations() {
     "INDEX api_keys(key_prefix)"
   );
 
+  // 7b. Auto-migrate legacy rag_api_keys → rag_api_keys_v2
+  // Copies rows, maps old scope names to new short form, then drops legacy table.
+  console.error("\n=== 7b. Legacy rag_api_keys Migration ===");
+  await runSQL(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rag_api_keys') THEN
+        INSERT INTO rag_api_keys_v2 (id, name, key_hash, key_prefix, scopes, client, expires_at, revoked_at, last_used_at, created_at)
+        SELECT id, name, key_hash, key_prefix,
+               ARRAY(
+                 SELECT CASE x
+                   WHEN 'read:public'    THEN 'query'
+                   WHEN 'read:internal'  THEN 'query'
+                   WHEN 'write:learn'    THEN 'learn'
+                   WHEN 'write:report'   THEN 'report'
+                   WHEN 'write:feedback' THEN 'feedback'
+                   ELSE x
+                 END
+                 FROM unnest(scopes) AS x
+               ),
+               client, expires_at, revoked_at, last_used_at, created_at
+        FROM rag_api_keys
+        ON CONFLICT (id) DO NOTHING;
+        DROP TABLE rag_api_keys;
+        RAISE NOTICE 'Migrated rag_api_keys → rag_api_keys_v2 and dropped legacy table';
+      END IF;
+    END $$
+  `, "MIGRATE rag_api_keys → rag_api_keys_v2");
+
   // 8. Query signals table
   console.error("\n=== 8. Query Signals Table ===");
   await runSQL(`
@@ -299,6 +348,19 @@ export async function runMigrations() {
       ('learned', 'Learned', 'Agent-contributed knowledge via /api/learn')
     ON CONFLICT (name) DO NOTHING
   `, "SEED rag_sources");
+
+  // 11b. Auto-seed rag_sources from existing chunk data (covers upgrades where
+  // users had custom sources beyond docs/learned).
+  console.error("\n=== 11b. Auto-seed Sources from Chunks ===");
+  await runSQL(`
+    INSERT INTO rag_sources (name, display_name)
+    SELECT DISTINCT source, initcap(replace(source, '-', ' '))
+    FROM kb_chunks
+    WHERE source IS NOT NULL
+      AND source != ''
+      AND source NOT IN (SELECT name FROM rag_sources)
+    ON CONFLICT (name) DO NOTHING
+  `, "SEED rag_sources from kb_chunks");
 
   // 12. API key → source permissions (per-action ACL).
   // admin-scoped keys bypass this table; non-admin keys must have explicit
