@@ -7,7 +7,7 @@ import {
   insforge,
   type SearchMode,
 } from "./query";
-import { embedTexts, buildLearnedChunkRow, insertChunks } from "./knowledge";
+import { embedTexts, buildLearnedChunkRows, insertChunks } from "./knowledge";
 import { clearBM25Cache } from "./bm25";
 import { appendFile } from "node:fs/promises";
 import {
@@ -380,14 +380,15 @@ const server = serve({
           return jsonResponse({ error: "title and content are required" }, 400);
         }
 
-        const chunkRow = buildLearnedChunkRow({ title, content, tags, source_query, source: targetSource });
-        const [embedding] = await embedTexts([chunkRow.text_content]);
-        await insertChunks([chunkRow], [embedding]);
+        const chunkRows = buildLearnedChunkRows({ title, content, tags, source_query, source: targetSource });
+        const embeddings = await embedTexts(chunkRows.map(r => r.text_content));
+        await insertChunks(chunkRows, embeddings);
 
-        console.log(`[API] Learned chunk indexed: ${chunkRow.id}`);
-        writeAudit({ chunk_id: chunkRow.id, action: "create", actor: auth.client || auth.keyPrefix || undefined, new_value: { title, content, tags } });
+        const ids = chunkRows.map(r => r.id);
+        console.log(`[API] Learned ${ids.length} chunk(s) indexed: ${ids[0]}${ids.length > 1 ? ` (+${ids.length - 1})` : ""}`);
+        writeAudit({ chunk_id: ids[0], action: "create", actor: auth.client || auth.keyPrefix || undefined, new_value: { title, content, tags, chunk_count: ids.length, ids } });
         clearBM25Cache();
-        return jsonResponse({ id: chunkRow.id, status: "indexed", verified: false });
+        return jsonResponse({ id: ids[0], ids, chunk_count: ids.length, status: "indexed", verified: false });
       } catch (err: any) {
         console.error("[API] Learn error:", err);
         return jsonResponse({ error: err.message }, 500);
@@ -439,7 +440,7 @@ const server = serve({
           stream = false,
           decay = DEFAULT_SEARCH_OPTIONS.decayHalfLife,
           rewrite = false,
-          visibility = "public",
+          sources,
         } = body;
 
         if (!query) {
@@ -450,8 +451,8 @@ const server = serve({
         const resolvedClient = body.client || auth.client || "api";
 
         const resolvedMode = (mode || (hybrid ? "hybrid" : "semantic")) as SearchMode;
-        if (resolvedMode !== "semantic" && resolvedMode !== "hybrid") {
-          return jsonResponse({ error: "mode must be semantic or hybrid" }, 400);
+        if (!["semantic", "hybrid", "sql-hybrid"].includes(resolvedMode)) {
+          return jsonResponse({ error: "mode must be semantic, hybrid, or sql-hybrid" }, 400);
         }
 
         const resolvedTopK = Number(top_k ?? top);
@@ -459,9 +460,16 @@ const server = serve({
           `[API] Query: "${query}" (rag: ${rag}, mode: ${resolvedMode}, top_k: ${resolvedTopK}, threshold: ${threshold}, kw: ${keyword_weight}, sem: ${semantic_weight}, stream: ${stream}, decay: ${decay}d)`
         );
 
-        const resolvedVisibility = (visibility === "all" || visibility === "internal") ? visibility : "public";
-        if (resolvedVisibility !== "public" && !hasScope(auth, "admin")) {
-          return jsonResponse({ error: "Insufficient permissions for internal visibility" }, 403);
+        // Resolve allowed sources: if caller passed `sources`, intersect with key's read perms;
+        // otherwise use full read perms. Admin (sourcesCanRead === null) sees everything.
+        let allowedSources: string[] | null = auth.sourcesCanRead;
+        if (Array.isArray(sources) && sources.length > 0) {
+          if (allowedSources === null) {
+            allowedSources = sources;
+          } else {
+            const allowed = new Set(allowedSources);
+            allowedSources = sources.filter((s: string) => allowed.has(s));
+          }
         }
         const chunks = await retrieveChunks(query, {
           mode: resolvedMode,
@@ -471,7 +479,7 @@ const server = serve({
           semanticWeight: Number(semantic_weight),
           decayHalfLife: Number(decay),
           rewrite: Boolean(rewrite),
-          visibility: resolvedVisibility,
+          allowedSources,
         });
 
         // Write signal asynchronously (don't block response)
@@ -596,7 +604,7 @@ const server = serve({
         let offset = 0;
         while (true) {
           const { data: rows, error: srcErr } = await insforge.database
-            .from("poc_kb_chunks")
+            .from("kb_chunks")
             .select("source")
             .range(offset, offset + PAGE_SIZE - 1);
           if (srcErr) throw srcErr;
@@ -622,15 +630,32 @@ const server = serve({
         const limit = Number(url.searchParams.get("limit") || 200);
         const offset = Number(url.searchParams.get("offset") || 0);
         let q = insforge.database
-          .from("poc_kb_chunks")
-          .select("id, title, question, answer, tags, source, verified, status, visibility, created_at", { count: "exact" })
+          .from("kb_chunks")
+          .select("id, title, question, answer, tags, source, verified, status, created_at", { count: "exact" })
           .eq("source", "learned")
           .order("created_at", { ascending: false })
           .range(offset, offset + limit - 1);
         if (statusFilter !== "all") q = (q as any).eq("status", statusFilter);
         const { data, error, count } = await q;
         if (error) return jsonResponse({ error: error.message }, 500);
-        return jsonResponse({ data, total: count });
+
+        // Fetch actors from audit log (first 'create' entry per chunk)
+        const chunkIds = (data as any[]).map((c: any) => c.id);
+        const actorMap: Record<string, string> = {};
+        if (chunkIds.length > 0) {
+          const { data: auditRows } = await insforge.database
+            .from("rag_audit_log")
+            .select("chunk_id, actor")
+            .in("chunk_id", chunkIds)
+            .eq("action", "create")
+            .not("actor", "is", null);
+          for (const row of (auditRows as any[] | null) ?? []) {
+            if (!actorMap[row.chunk_id]) actorMap[row.chunk_id] = row.actor;
+          }
+        }
+        const dataWithActor = (data as any[]).map((c: any) => ({ ...c, actor: actorMap[c.id] ?? null }));
+
+        return jsonResponse({ data: dataWithActor, total: count });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
@@ -642,11 +667,11 @@ const server = serve({
       try {
         const id = verifyMatch[1];
         const { error } = await insforge.database
-          .from("poc_kb_chunks")
+          .from("kb_chunks")
           .update({ verified: true, status: "verified" })
           .eq("id", id);
         if (error) return jsonResponse({ error: error.message }, 500);
-        writeAudit({ chunk_id: id, action: "verify", old_value: { status: "unverified" }, new_value: { status: "verified" } });
+        writeAudit({ chunk_id: id, action: "verify", actor: auth.client || auth.keyPrefix || undefined, old_value: { status: "unverified" }, new_value: { status: "verified" } });
         return jsonResponse({ success: true });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
@@ -659,11 +684,11 @@ const server = serve({
       try {
         const id = rejectMatch[1];
         const { error } = await insforge.database
-          .from("poc_kb_chunks")
+          .from("kb_chunks")
           .update({ status: "rejected" })
           .eq("id", id);
         if (error) return jsonResponse({ error: error.message }, 500);
-        writeAudit({ chunk_id: id, action: "reject", old_value: { status: "unverified" }, new_value: { status: "rejected" } });
+        writeAudit({ chunk_id: id, action: "reject", actor: auth.client || auth.keyPrefix || undefined, old_value: { status: "unverified" }, new_value: { status: "rejected" } });
         clearBM25Cache();
         return jsonResponse({ success: true });
       } catch (err: any) {
@@ -678,17 +703,17 @@ const server = serve({
         const id = deleteLearnedMatch[1];
         // Fetch old data for audit
         const { data: oldData } = await insforge.database
-          .from("poc_kb_chunks")
+          .from("kb_chunks")
           .select("title, status, source")
           .eq("id", id)
           .single();
         const { error } = await insforge.database
-          .from("poc_kb_chunks")
+          .from("kb_chunks")
           .update({ status: "rejected" })
           .eq("id", id)
           .eq("source", "learned");
         if (error) return jsonResponse({ error: error.message }, 500);
-        writeAudit({ chunk_id: id, action: "reject", old_value: oldData, new_value: { status: "rejected" } });
+        writeAudit({ chunk_id: id, action: "reject", actor: auth.client || auth.keyPrefix || undefined, old_value: oldData, new_value: { status: "rejected" } });
         clearBM25Cache();
         return jsonResponse({ success: true });
       } catch (err: any) {
@@ -719,7 +744,7 @@ const server = serve({
           // 2. Unverified learned (no time window)
           (async () => {
             const { data, error, count } = await insforge.database
-              .from("poc_kb_chunks")
+              .from("kb_chunks")
               .select("id, title, tags, created_at", { count: "exact" })
               .eq("source", "learned")
               .eq("status", "unverified")
@@ -867,8 +892,8 @@ const server = serve({
         let chunks: any[] = [];
         if (chunkIds.length > 0) {
           const { data: chunkData } = await insforge.database
-            .from("poc_kb_chunks")
-            .select("id, title, question, answer, tags, source, verified, status, visibility, created_at, url")
+            .from("kb_chunks")
+            .select("id, title, question, answer, tags, source, verified, status, created_at, url")
             .in("id", chunkIds);
           chunks = chunkData || [];
         }
@@ -886,20 +911,18 @@ const server = serve({
         const offset = Number(url.searchParams.get("offset") || 0);
         const source = url.searchParams.get("source");
         const status = url.searchParams.get("status");
-        const visibility = url.searchParams.get("visibility");
         const search = url.searchParams.get("search") || "";
         const sortBy = url.searchParams.get("sort_by") || "created_at";
         const sortDir = url.searchParams.get("sort_dir") === "asc";
 
         let q = insforge.database
-          .from("poc_kb_chunks")
-          .select("id, title, question, answer, tags, source, verified, status, visibility, created_at, url", { count: "exact" })
+          .from("kb_chunks")
+          .select("id, title, question, answer, tags, source, verified, status, created_at, url", { count: "exact" })
           .order(sortBy, { ascending: sortDir })
           .range(offset, offset + limit - 1);
 
         if (source) q = (q as any).eq("source", source);
         if (status) q = (q as any).eq("status", status);
-        if (visibility) q = (q as any).eq("visibility", visibility);
         if (search) q = (q as any).or(`id.ilike.%${search}%,title.ilike.%${search}%,question.ilike.%${search}%,answer.ilike.%${search}%`);
 
         const { data, error, count } = await q;
@@ -916,8 +939,8 @@ const server = serve({
       try {
         const id = decodeURIComponent(chunkDetailMatch[1]);
         const { data: chunk, error } = await insforge.database
-          .from("poc_kb_chunks")
-          .select("id, title, question, answer, text_content, tags, source, verified, status, visibility, parent_id, created_at, url")
+          .from("kb_chunks")
+          .select("id, title, question, answer, text_content, tags, source, verified, status, parent_id, created_at, url")
           .eq("id", id)
           .single();
         if (error || !chunk) return jsonResponse({ error: "Chunk not found" }, 404);
@@ -951,7 +974,7 @@ const server = serve({
     }
 
     // Admin: Update chunk content (any subset of editable fields)
-    // PATCH body: { title?, question?, answer?, tags?, url?, text_content?, visibility?, status? }
+    // PATCH body: { title?, question?, answer?, tags?, url?, text_content?, status? }
     // If text_content is provided, the embedding is recomputed.
     const patchChunkMatch = url.pathname.match(/^\/api\/admin\/chunks\/([^/]+)$/);
     if (patchChunkMatch && req.method === "PATCH") {
@@ -959,16 +982,13 @@ const server = serve({
         const id = decodeURIComponent(patchChunkMatch[1]);
         const body = await req.json();
 
-        const editable = ["title", "question", "answer", "tags", "url", "text_content", "visibility", "status"] as const;
+        const editable = ["title", "question", "answer", "tags", "url", "text_content", "status"] as const;
         const updates: Record<string, any> = {};
         for (const key of editable) {
           if (key in body) updates[key] = body[key];
         }
         if (Object.keys(updates).length === 0) {
           return jsonResponse({ error: "No editable fields provided" }, 400);
-        }
-        if (updates.visibility && updates.visibility !== "public" && updates.visibility !== "internal") {
-          return jsonResponse({ error: "visibility must be 'public' or 'internal'" }, 400);
         }
         if (updates.status && !["unverified", "verified", "rejected"].includes(updates.status)) {
           return jsonResponse({ error: "status must be 'unverified' | 'verified' | 'rejected'" }, 400);
@@ -987,8 +1007,8 @@ const server = serve({
 
         // Fetch old row for audit + existence check
         const { data: oldRow, error: fetchErr } = await insforge.database
-          .from("poc_kb_chunks")
-          .select("id, title, question, answer, tags, url, text_content, visibility, status")
+          .from("kb_chunks")
+          .select("id, title, question, answer, tags, url, text_content, status")
           .eq("id", id)
           .single();
         if (fetchErr || !oldRow) return jsonResponse({ error: "Chunk not found" }, 404);
@@ -1002,7 +1022,7 @@ const server = serve({
         }
 
         const { error: updateErr } = await insforge.database
-          .from("poc_kb_chunks")
+          .from("kb_chunks")
           .update(updates)
           .eq("id", id);
         if (updateErr) return jsonResponse({ error: updateErr.message }, 500);
@@ -1017,59 +1037,10 @@ const server = serve({
           }
         }
         if (embeddingUpdated) newDiff.embedding = "<re-embedded>";
-        writeAudit({ chunk_id: id, action: "edit", old_value: oldDiff, new_value: newDiff });
+        writeAudit({ chunk_id: id, action: "edit", actor: auth.client || auth.keyPrefix || undefined, old_value: oldDiff, new_value: newDiff });
 
         clearBM25Cache();
         return jsonResponse({ success: true, id, updated_fields: Object.keys(newDiff), embedding_updated: embeddingUpdated });
-      } catch (err: any) {
-        return jsonResponse({ error: err.message }, 500);
-      }
-    }
-
-    // Admin: Update chunk visibility
-    const visibilityMatch = url.pathname.match(/^\/api\/admin\/chunks\/([^/]+)\/visibility$/);
-    if (visibilityMatch && req.method === "POST") {
-      try {
-        const id = decodeURIComponent(visibilityMatch[1]);
-        const { visibility } = await req.json();
-        if (visibility !== "public" && visibility !== "internal") {
-          return jsonResponse({ error: "visibility must be 'public' or 'internal'" }, 400);
-        }
-        const { data: old } = await insforge.database
-          .from("poc_kb_chunks")
-          .select("visibility")
-          .eq("id", id)
-          .single();
-        const { error } = await insforge.database
-          .from("poc_kb_chunks")
-          .update({ visibility })
-          .eq("id", id);
-        if (error) return jsonResponse({ error: error.message }, 500);
-        writeAudit({ chunk_id: id, action: "visibility_change", old_value: old, new_value: { visibility } });
-        clearBM25Cache();
-        return jsonResponse({ success: true });
-      } catch (err: any) {
-        return jsonResponse({ error: err.message }, 500);
-      }
-    }
-
-    // Admin: Bulk visibility update
-    if (url.pathname === "/api/admin/chunks/bulk-visibility" && req.method === "POST") {
-      try {
-        const { ids, visibility } = await req.json();
-        if (!Array.isArray(ids) || (visibility !== "public" && visibility !== "internal")) {
-          return jsonResponse({ error: "ids (array) and visibility ('public'|'internal') required" }, 400);
-        }
-        const { error } = await insforge.database
-          .from("poc_kb_chunks")
-          .update({ visibility })
-          .in("id", ids);
-        if (error) return jsonResponse({ error: error.message }, 500);
-        for (const id of ids) {
-          writeAudit({ chunk_id: id, action: "visibility_change", new_value: { visibility } });
-        }
-        clearBM25Cache();
-        return jsonResponse({ success: true, count: ids.length });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
@@ -1144,11 +1115,11 @@ const server = serve({
           // Learned stats
           (async () => {
             const { count: unverified } = await insforge.database
-              .from("poc_kb_chunks").select("*", { count: "exact", head: true }).eq("source", "learned").eq("status", "unverified");
+              .from("kb_chunks").select("*", { count: "exact", head: true }).eq("source", "learned").eq("status", "unverified");
             const { count: verified } = await insforge.database
-              .from("poc_kb_chunks").select("*", { count: "exact", head: true }).eq("source", "learned").eq("status", "verified");
+              .from("kb_chunks").select("*", { count: "exact", head: true }).eq("source", "learned").eq("status", "verified");
             const { count: rejected } = await insforge.database
-              .from("poc_kb_chunks").select("*", { count: "exact", head: true }).eq("source", "learned").eq("status", "rejected");
+              .from("kb_chunks").select("*", { count: "exact", head: true }).eq("source", "learned").eq("status", "rejected");
             return { learnedUnverified: unverified || 0, learnedVerified: verified || 0, learnedRejected: rejected || 0 };
           })(),
           // Key stats
@@ -1358,7 +1329,7 @@ const server = serve({
       if (!checkBasicAuth(req)) return unauthorizedResponse();
       const id = decodeURIComponent(chunkMatch[1]);
       const { data, error } = await insforge.database
-        .from("poc_kb_chunks")
+        .from("kb_chunks")
         .select("id, title, question, answer, tags, source, created_at, url, verified")
         .eq("id", id)
         .single();

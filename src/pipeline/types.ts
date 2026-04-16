@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 
-// Chunk format — matches the existing DB schema (poc_kb_chunks)
+// Chunk format — matches the existing DB schema (kb_chunks)
 export interface Chunk {
   id: string;
   source: string;
@@ -13,7 +13,6 @@ export interface Chunk {
     parent_id: string | null;
     created_at: string | null;
     url: string | null;
-    visibility?: "internal" | "public";
   };
 }
 
@@ -43,7 +42,6 @@ export interface ExistingChunkRow {
   parent_id: string | null;
   created_at: string | null;
   url: string | null;
-  visibility: string | null;
 }
 
 function canonTs(ts: string | null | undefined): string | null {
@@ -62,7 +60,6 @@ export function normalizeChunk(chunk: Chunk): Record<string, unknown> {
     parent_id: chunk.metadata.parent_id,
     created_at: canonTs(chunk.metadata.created_at),
     url: chunk.metadata.url || null,
-    visibility: chunk.metadata.visibility ?? "public",
   };
 }
 
@@ -77,7 +74,6 @@ export function normalizeExistingRow(row: ExistingChunkRow): Record<string, unkn
     parent_id: row.parent_id,
     created_at: canonTs(row.created_at),
     url: row.url || null,
-    visibility: row.visibility ?? null,
   };
 }
 

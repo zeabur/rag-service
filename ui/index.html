@@ -283,7 +283,6 @@
                                     <span class="text-xs px-2 py-0.5 rounded-full font-medium"
                                         :class="inspect.data.chunk.status === 'verified' ? 'bg-green-100 text-green-700' : inspect.data.chunk.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'"
                                         x-text="inspect.data.chunk.status"></span>
-                                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600" x-text="inspect.data.chunk.visibility || 'public'"></span>
                                     <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600" x-text="inspect.data.chunk.source"></span>
                                 </div>
                             </div>
@@ -507,7 +506,7 @@
             <div class="max-w-2xl mx-auto">
                 <!-- No chunk selected -->
                 <div x-show="!edit.chunkId">
-                    <p class="text-sm text-gray-500 mb-6">Edit a chunk's content, tags, or visibility. Enter a Chunk ID or use Inspect → Edit.</p>
+                    <p class="text-sm text-gray-500 mb-6">Edit a chunk's content or tags. Enter a Chunk ID or use Inspect → Edit.</p>
                     <form @submit.prevent="editLoadChunk()" class="flex space-x-3">
                         <input type="text" x-model="edit.idInput" required
                                class="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none"
@@ -542,22 +541,13 @@
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Tags <span class="text-gray-400 font-normal">(comma-separated)</span></label>
                             <input type="text" x-model="edit.form.tags" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none">
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Status</label>
-                                <select x-model="edit.form.status" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
-                                    <option value="unverified">Unverified</option>
-                                    <option value="verified">Verified</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Visibility</label>
-                                <select x-model="edit.form.visibility" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
-                                    <option value="public">Public</option>
-                                    <option value="internal">Internal</option>
-                                </select>
-                            </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Status</label>
+                            <select x-model="edit.form.status" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-white">
+                                <option value="unverified">Unverified</option>
+                                <option value="verified">Verified</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
                         </div>
                         <div x-show="edit.error" x-cloak class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3" x-text="edit.error"></div>
                         <div x-show="edit.success" x-cloak class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl px-4 py-3">Chunk updated successfully.</div>
@@ -694,18 +684,6 @@
                     <input type="range" min="0" max="730" step="30" x-model="settings.decay"
                            class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
                 </div>
-                <div class="flex items-center justify-between">
-                    <div>
-                        <div class="text-sm font-medium text-gray-800">Internal Search</div>
-                        <div class="text-xs text-gray-400 mt-0.5">Search internal knowledge (requires admin scope)</div>
-                    </div>
-                    <button @click="settings.visibility = settings.visibility === 'all' ? 'public' : 'all'"
-                            class="relative w-11 h-6 rounded-full transition-colors"
-                            :class="settings.visibility === 'all' ? 'bg-indigo-600' : 'bg-gray-200'">
-                        <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
-                              :class="settings.visibility === 'all' ? 'translate-x-5' : 'translate-x-0'"></span>
-                    </button>
-                </div>
                 <button @click="showSettingsModal = false"
                         class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition">
                     Done
@@ -775,7 +753,7 @@
                 tab: 'chat',
 
                 // ── Shared ──
-                settings: { hybrid: true, model: 'gemini-2.5-flash', decay: 180, visibility: 'public', apiKey: '' },
+                settings: { hybrid: true, model: 'gemini-2.5-flash', decay: 180, apiKey: '' },
                 showSettingsModal: false,
                 apiKeyInput: '',
                 selectedSource: null,
@@ -830,7 +808,7 @@
                     saving: false,
                     error: '',
                     success: false,
-                    form: { title: '', question: '', answer: '', tags: '', status: '', visibility: '' },
+                    form: { title: '', question: '', answer: '', tags: '', status: '' },
                 },
 
                 // ── Init ──
@@ -940,7 +918,6 @@
                                 hybrid: this.settings.hybrid,
                                 model: this.settings.model,
                                 decay: parseInt(this.settings.decay),
-                                visibility: this.settings.visibility,
                                 stream: true,
                                 client: 'web-ui',
                             }),
@@ -1139,7 +1116,6 @@
                     this.edit.form.answer = chunk.answer || '';
                     this.edit.form.tags = (chunk.tags || []).join(', ');
                     this.edit.form.status = chunk.status || 'unverified';
-                    this.edit.form.visibility = chunk.visibility || 'public';
                     this.edit.error = '';
                     this.edit.success = false;
                     this.switchTab('edit');
@@ -1179,7 +1155,6 @@
                             text_content: textContent,
                             tags,
                             status: this.edit.form.status,
-                            visibility: this.edit.form.visibility,
                         };
                         const res = await fetch('/api/admin/chunks/' + encodeURIComponent(this.edit.chunkId), {
                             method: 'PATCH', headers: this.authHeaders(),
@@ -1202,7 +1177,7 @@
                     this.edit.idInput = '';
                     this.edit.error = '';
                     this.edit.success = false;
-                    this.edit.form = { title: '', question: '', answer: '', tags: '', status: '', visibility: '' };
+                    this.edit.form = { title: '', question: '', answer: '', tags: '', status: '' };
                 },
             }
         }

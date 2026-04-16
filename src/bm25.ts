@@ -135,7 +135,7 @@ interface DocEntry {
   tf: Map<string, number>;
   length: number;
   createdAt: string | null;
-  visibility: string;
+  source: string;
 }
 
 // BM25 parameters
@@ -148,13 +148,13 @@ export class BM25Index {
   private avgDl = 0;
   private N = 0;
 
-  addDocument(id: string, text: string, createdAt: string | null, visibility: string = "public"): void {
+  addDocument(id: string, text: string, createdAt: string | null, source: string): void {
     const tokens = tokenize(text);
     const tf = new Map<string, number>();
     for (const token of tokens) {
       tf.set(token, (tf.get(token) || 0) + 1);
     }
-    this.docs.set(id, { tokens, tf, length: tokens.length, createdAt, visibility });
+    this.docs.set(id, { tokens, tf, length: tokens.length, createdAt, source });
 
     for (const term of tf.keys()) {
       this.df.set(term, (this.df.get(term) || 0) + 1);
@@ -171,14 +171,14 @@ export class BM25Index {
     console.error(`[bm25] Index built: ${this.N} docs, avgDl=${this.avgDl.toFixed(1)}, ${this.df.size} unique terms`);
   }
 
-  search(query: string, topK: number, visibility: string = "public"): { id: string; score: number; createdAt: string | null }[] {
+  search(query: string, topK: number, allowedSources: string[] | null = null): { id: string; score: number; createdAt: string | null }[] {
     const queryTokens = tokenize(query);
     if (queryTokens.length === 0) return [];
 
     const scores: { id: string; score: number; createdAt: string | null }[] = [];
 
     for (const [id, doc] of this.docs) {
-      if (visibility !== "all" && doc.visibility !== visibility) continue;
+      if (allowedSources !== null && !allowedSources.includes(doc.source)) continue;
       let score = 0;
 
       for (const term of queryTokens) {
@@ -222,14 +222,14 @@ export async function loadBM25Index(): Promise<BM25Index> {
   console.error("[bm25] Loading chunks from DB...");
 
   // Fetch all chunks — paginate since default limit is 1000
-  const allRows: { id: string; title: string; text_content: string; created_at: string | null; visibility: string; status: string | null }[] = [];
+  const allRows: { id: string; title: string; text_content: string; created_at: string | null; source: string; status: string | null }[] = [];
   const PAGE_SIZE = 1000;
   let offset = 0;
 
   while (true) {
     const { data, error } = await insforge.database
-      .from("poc_kb_chunks")
-      .select("id, title, text_content, created_at, visibility, status")
+      .from("kb_chunks")
+      .select("id, title, text_content, created_at, source, status")
       .range(offset, offset + PAGE_SIZE - 1);
 
     if (error) throw new Error(`Failed to load chunks: ${JSON.stringify(error)}`);
@@ -248,7 +248,7 @@ export async function loadBM25Index(): Promise<BM25Index> {
   for (const row of activeRows) {
     // Title boosting: inject title tokens twice
     const text = `${row.title} ${row.title} ${row.text_content || ""}`;
-    index.addDocument(row.id, text, row.created_at, row.visibility || "public");
+    index.addDocument(row.id, text, row.created_at, row.source);
   }
   index.build();
 

@@ -38,7 +38,7 @@ export async function runMigrations() {
     "CREATE EXTENSION vector"
   );
   await runSQL(`
-    CREATE TABLE IF NOT EXISTS poc_kb_chunks (
+    CREATE TABLE IF NOT EXISTS kb_chunks (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       question TEXT NOT NULL,
@@ -46,23 +46,34 @@ export async function runMigrations() {
       text_content TEXT NOT NULL,
       tags TEXT[] DEFAULT '{}',
       embedding vector(1536),
-      source TEXT DEFAULT 'forum',
+      source TEXT NOT NULL,
       parent_id TEXT,
       created_at TIMESTAMPTZ,
       fts tsvector,
-      verified BOOLEAN DEFAULT true,
+      verified BOOLEAN DEFAULT false,
       url TEXT,
-      visibility TEXT DEFAULT 'public',
       status TEXT DEFAULT 'unverified'
     )
-  `, "CREATE TABLE poc_kb_chunks");
+  `, "CREATE TABLE kb_chunks");
   await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON poc_kb_chunks USING hnsw (embedding vector_cosine_ops)`,
-    "INDEX chunks(embedding hnsw)"
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_embedding ON kb_chunks USING hnsw (embedding vector_cosine_ops)`,
+    "INDEX kb_chunks(embedding hnsw)"
   );
   await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_chunks_fts ON poc_kb_chunks USING gin (fts)`,
-    "INDEX chunks(fts)"
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_fts ON kb_chunks USING gin (fts)`,
+    "INDEX kb_chunks(fts)"
+  );
+  await runSQL(
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_status ON kb_chunks(status)`,
+    "INDEX kb_chunks(status)"
+  );
+  await runSQL(
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_source ON kb_chunks(source)`,
+    "INDEX kb_chunks(source)"
+  );
+  await runSQL(
+    `CREATE INDEX IF NOT EXISTS idx_kb_chunks_tags_gin ON kb_chunks USING gin(tags)`,
+    "GIN INDEX kb_chunks(tags)"
   );
 
   // 1. Audit log table
@@ -92,46 +103,17 @@ export async function runMigrations() {
     "INDEX audit_log(action)"
   );
 
-  // 2. Visibility column
-  console.error("\n=== 2. Visibility Column ===");
-  await runSQL(
-    `ALTER TABLE poc_kb_chunks ADD COLUMN IF NOT EXISTS visibility TEXT DEFAULT 'public'`,
-    "ADD COLUMN visibility"
-  );
-  await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_chunks_visibility ON poc_kb_chunks(visibility)`,
-    "INDEX chunks(visibility)"
-  );
-
-  // 3. Status column
-  console.error("\n=== 3. Status Column ===");
-  await runSQL(
-    `ALTER TABLE poc_kb_chunks ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'unverified'`,
-    "ADD COLUMN status"
-  );
-  await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_chunks_status ON poc_kb_chunks(status)`,
-    "INDEX chunks(status)"
-  );
-
-  // 4. GIN index on tags for .contains() queries
-  console.error("\n=== 4. GIN Index on Tags ===");
-  await runSQL(
-    `CREATE INDEX IF NOT EXISTS idx_chunks_tags_gin ON poc_kb_chunks USING gin(tags)`,
-    "GIN INDEX chunks(tags)"
-  );
-
-  // 5. Update hybrid_search to support visibility filtering
-  console.error("\n=== 5. Update hybrid_search Function ===");
+  // 2. kb_hybrid_search — hybrid search on kb_chunks with source-based ACL
+  console.error("\n=== 2. kb_hybrid_search Function ===");
   await runSQL(`
-    CREATE OR REPLACE FUNCTION hybrid_search(
+    CREATE OR REPLACE FUNCTION kb_hybrid_search(
       query_embedding vector(1536),
       query_text text,
       match_count int,
       keyword_weight float DEFAULT 0.25,
       semantic_weight float DEFAULT 0.75,
       decay_halflife float DEFAULT 180,
-      p_visibility text DEFAULT 'public'
+      p_sources text[] DEFAULT NULL
     )
     RETURNS TABLE(id text, title text, question text, answer text, tags text[], similarity float, url text)
     LANGUAGE sql STABLE
@@ -140,8 +122,8 @@ export async function runMigrations() {
         SELECT
           c.id,
           ROW_NUMBER() OVER (ORDER BY c.embedding <=> query_embedding) AS rank
-        FROM poc_kb_chunks c
-        WHERE (p_visibility = 'all' OR c.visibility = p_visibility)
+        FROM kb_chunks c
+        WHERE (p_sources IS NULL OR c.source = ANY(p_sources))
           AND (c.status IS NULL OR c.status != 'rejected')
         ORDER BY c.embedding <=> query_embedding
         LIMIT match_count * 2
@@ -150,9 +132,9 @@ export async function runMigrations() {
         SELECT
           c.id,
           ROW_NUMBER() OVER (ORDER BY ts_rank_cd(c.fts, websearch_to_tsquery('english', query_text)) DESC) AS rank
-        FROM poc_kb_chunks c
+        FROM kb_chunks c
         WHERE c.fts @@ websearch_to_tsquery('english', query_text)
-          AND (p_visibility = 'all' OR c.visibility = p_visibility)
+          AND (p_sources IS NULL OR c.source = ANY(p_sources))
           AND (c.status IS NULL OR c.status != 'rejected')
         LIMIT match_count * 2
       ),
@@ -178,20 +160,20 @@ export async function runMigrations() {
         )::float AS similarity,
         c.url
       FROM combined cb
-      JOIN poc_kb_chunks c ON c.id = cb.id
+      JOIN kb_chunks c ON c.id = cb.id
       ORDER BY similarity DESC
       LIMIT match_count;
     $fn$
-  `, "UPDATE FUNCTION hybrid_search (with visibility + rejected filter)");
+  `, "CREATE FUNCTION kb_hybrid_search");
 
-  // 6. Update match_chunks to support visibility filtering
-  console.error("\n=== 6. Update match_chunks Function ===");
+  // 3. kb_match_chunks — semantic search on kb_chunks with source-based ACL
+  console.error("\n=== 3. kb_match_chunks Function ===");
   await runSQL(`
-    CREATE OR REPLACE FUNCTION match_chunks(
+    CREATE OR REPLACE FUNCTION kb_match_chunks(
       query_embedding vector(1536),
       match_threshold float,
       match_count int,
-      p_visibility text DEFAULT 'public'
+      p_sources text[] DEFAULT NULL
     )
     RETURNS TABLE(id text, title text, question text, answer text, tags text[], similarity float, created_at timestamptz, source text, verified boolean, url text)
     LANGUAGE sql STABLE
@@ -207,14 +189,14 @@ export async function runMigrations() {
         c.source,
         c.verified,
         c.url
-      FROM poc_kb_chunks c
+      FROM kb_chunks c
       WHERE (1 - (c.embedding <=> query_embedding)) > match_threshold
-        AND (p_visibility = 'all' OR c.visibility = p_visibility)
+        AND (p_sources IS NULL OR c.source = ANY(p_sources))
         AND (c.status IS NULL OR c.status != 'rejected')
       ORDER BY c.embedding <=> query_embedding
       LIMIT match_count;
     $fn$
-  `, "UPDATE FUNCTION match_chunks (with visibility + rejected filter)");
+  `, "CREATE FUNCTION kb_match_chunks");
 
   // 7. API Keys table (v2 schema — same columns as legacy rag_api_keys,
   // but named v2 to stay aligned with zeabur-rag for future diffs)

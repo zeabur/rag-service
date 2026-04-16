@@ -15,8 +15,8 @@ const QUERY_PAGE_SIZE = 1000;
 
 async function getExistingChunkHashes(): Promise<Map<string, string>> {
   const { data, error } = await insforge.database
-    .from("poc_kb_chunks")
-    .select("id,title,question,answer,text_content,tags,source,parent_id,created_at,url,visibility");
+    .from("kb_chunks")
+    .select("id,title,question,answer,text_content,tags,source,parent_id,created_at,url");
   if (error) {
     console.error("Error fetching existing chunks:", error);
     return new Map();
@@ -30,7 +30,7 @@ async function deleteChunksByIds(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
-    const { error } = await insforge.database.from("poc_kb_chunks").delete().in("id", batch);
+    const { error } = await insforge.database.from("kb_chunks").delete().in("id", batch);
     if (error) throw new Error(`Delete batch failed: ${JSON.stringify(error)}`);
   }
 }
@@ -40,7 +40,7 @@ async function deleteAllChunks(): Promise<void> {
   let offset = 0;
   while (true) {
     const { data, error } = await insforge.database
-      .from("poc_kb_chunks").select("id").range(offset, offset + QUERY_PAGE_SIZE - 1);
+      .from("kb_chunks").select("id").range(offset, offset + QUERY_PAGE_SIZE - 1);
     if (error) throw new Error(`Failed to fetch IDs: ${JSON.stringify(error)}`);
     if (!data || data.length === 0) break;
     allIds.push(...data.map((row: { id: string }) => row.id));
@@ -52,7 +52,7 @@ async function deleteAllChunks(): Promise<void> {
   const DEL_BATCH = 50;
   for (let i = 0; i < allIds.length; i += DEL_BATCH) {
     const batch = allIds.slice(i, i + DEL_BATCH);
-    const { error } = await insforge.database.from("poc_kb_chunks").delete().in("id", batch);
+    const { error } = await insforge.database.from("kb_chunks").delete().in("id", batch);
     if (error) throw new Error(`Delete batch failed: ${JSON.stringify(error)}`);
   }
   console.error(`Deleted ${allIds.length} chunks.`);
@@ -63,7 +63,7 @@ async function getRejectedChunkIds(): Promise<string[]> {
   let offset = 0;
   while (true) {
     const { data, error } = await insforge.database
-      .from("poc_kb_chunks").select("id").eq("status", "rejected")
+      .from("kb_chunks").select("id").eq("status", "rejected")
       .range(offset, offset + QUERY_PAGE_SIZE - 1);
     if (error) { console.error("Warning: failed to snapshot rejected IDs:", error); return []; }
     if (!data || data.length === 0) break;
@@ -81,7 +81,7 @@ async function restoreRejectedStatus(ids: string[]): Promise<number> {
   for (let i = 0; i < ids.length; i += BATCH) {
     const batch = ids.slice(i, i + BATCH);
     const { data, error } = await insforge.database
-      .from("poc_kb_chunks").update({ status: "rejected" })
+      .from("kb_chunks").update({ status: "rejected" })
       .in("id", batch).neq("status", "rejected").select("id");
     if (error) throw new Error(`Failed to restore rejected status: ${JSON.stringify(error)}`);
     restored += data?.length || 0;
@@ -101,11 +101,10 @@ async function uploadBatch(chunks: Chunk[], embeddings: number[][]): Promise<voi
     parent_id: chunk.metadata.parent_id,
     created_at: chunk.metadata.created_at || null,
     url: chunk.metadata.url || null,
-    visibility: chunk.metadata.visibility ?? "public",
     status: "verified",
     embedding: JSON.stringify(embeddings[i]),
   }));
-  const { error } = await insforge.database.from("poc_kb_chunks").insert(rows);
+  const { error } = await insforge.database.from("kb_chunks").insert(rows);
   if (error) throw new Error(`Insert failed: ${JSON.stringify(error)}`);
 }
 

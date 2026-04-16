@@ -32,7 +32,7 @@ export interface SearchOptions {
   semanticWeight: number;
   decayHalfLife: number;
   rewrite?: boolean;
-  visibility?: "public" | "internal" | "all";
+  allowedSources?: string[] | null; // null = admin (all sources)
 }
 
 export const DEFAULT_SEARCH_OPTIONS: SearchOptions = {
@@ -82,13 +82,13 @@ export async function searchChunks(
   embedding: number[],
   matchThreshold: number,
   matchCount: number,
-  visibility: string = "public"
+  allowedSources: string[] | null = null
 ): Promise<MatchedChunk[]> {
-  const { data, error } = await insforge.database.rpc("match_chunks", {
+  const { data, error } = await insforge.database.rpc("kb_match_chunks", {
     query_embedding: JSON.stringify(embedding),
     match_threshold: matchThreshold,
     match_count: matchCount,
-    p_visibility: visibility,
+    p_sources: allowedSources ?? null,
   });
 
   if (error) {
@@ -105,16 +105,16 @@ export async function searchHybrid(
   keywordWeight: number = DEFAULT_SEARCH_OPTIONS.keywordWeight,
   semanticWeight: number = DEFAULT_SEARCH_OPTIONS.semanticWeight,
   decayHalfLife: number = DEFAULT_SEARCH_OPTIONS.decayHalfLife,
-  visibility: string = "public"
+  allowedSources: string[] | null = null
 ): Promise<MatchedChunk[]> {
-  const { data, error } = await insforge.database.rpc("hybrid_search", {
+  const { data, error } = await insforge.database.rpc("kb_hybrid_search", {
     query_embedding: JSON.stringify(embedding),
     query_text: queryText,
     match_count: matchCount,
     keyword_weight: keywordWeight,
     semantic_weight: semanticWeight,
     decay_halflife: decayHalfLife,
-    p_visibility: visibility,
+    p_sources: allowedSources ?? null,
   });
 
   if (error) {
@@ -132,13 +132,13 @@ async function searchHybridBM25(
   const index = await loadBM25Index();
   const pool = options.topK * 4;
 
-  const visibility = options.visibility || "public";
+  const allowedSources = options.allowedSources ?? null;
 
-  // 1. BM25 keyword search (hard-filtered by visibility)
-  const bm25Results = index.search(queryText, pool, visibility);
+  // 1. BM25 keyword search (hard-filtered by source)
+  const bm25Results = index.search(queryText, pool, allowedSources);
 
-  // 2. Semantic search via pgvector (hard-filtered by visibility in SQL)
-  const semanticResults = await searchChunks(embedding, 0.3, pool, visibility);
+  // 2. Semantic search via pgvector (hard-filtered by source in SQL)
+  const semanticResults = await searchChunks(embedding, 0.3, pool, allowedSources);
 
   const bm25Rank = new Map(bm25Results.map((r, i) => [r.id, i + 1]));
   const semanticRank = new Map(semanticResults.map((r, i) => [r.id, i + 1]));
@@ -188,7 +188,7 @@ async function searchHybridBM25(
   // Batch-fetch chunks only in BM25 results (not in semantic results)
   if (missingIds.length > 0) {
     const { data } = await insforge.database
-      .from("poc_kb_chunks")
+      .from("kb_chunks")
       .select("id, title, question, answer, tags, created_at, source, verified, status, url")
       .in("id", missingIds);
 
@@ -227,10 +227,10 @@ export async function retrieveChunks(
     return searchHybrid(
       embedding, queryText, options.topK,
       options.keywordWeight, options.semanticWeight, options.decayHalfLife,
-      options.visibility || "public"
+      options.allowedSources ?? null
     );
   }
-  return searchChunks(await embedQuery(queryText), options.threshold, options.topK, options.visibility || "public");
+  return searchChunks(await embedQuery(queryText), options.threshold, options.topK, options.allowedSources ?? null);
 }
 
 export function truncate(text: string, maxLen: number): string {
@@ -364,7 +364,7 @@ async function main() {
         model: { type: "string", default: "claude-opus-4-5" },
         decay: { type: "string", default: "180" },
         rewrite: { type: "boolean", default: false },
-        visibility: { type: "string", default: "public" },
+        sources: { type: "string" },
       },
       allowPositionals: true,
     });
@@ -384,7 +384,7 @@ Options:
   --model MODEL      LLM model for RAG mode (default: claude-opus-4-5)
   --decay DAYS       Temporal decay half-life in days (default: 180, 0 to disable)
   --rewrite          Expand query with LLM before search
-  --visibility SCOPE Search scope: public | internal | all (default: public)
+  --sources SOURCES  Comma-separated source filter (e.g. docs,learned). Default: all.
 
 Examples:
   bun run src/query.ts "如何部署 Docker 服務"
@@ -398,7 +398,7 @@ Examples:
     const ragMode = values.rag!;
     const mode = (values.mode ||
       (values.hybrid ? "hybrid" : "semantic")) as SearchMode;
-    if (mode !== "semantic" && mode !== "hybrid") {
+    if (!["semantic", "hybrid", "sql-hybrid"].includes(mode)) {
       throw new Error(`Invalid --mode: ${values.mode}`);
     }
     const model = values.model!;
@@ -406,10 +406,10 @@ Examples:
     const keywordWeight = parseFloat(values["keyword-weight"]!);
     const semanticWeight = parseFloat(values["semantic-weight"]!);
     const rewrite = values.rewrite!;
-    const visibility = (values.visibility as string) || "public";
+    const allowedSources = values.sources ? (values.sources as string).split(",").map((s: string) => s.trim()) : null;
 
     console.error(
-      `Searching [${mode}] (top: ${top}, threshold: ${threshold}, kw: ${keywordWeight}, sem: ${semanticWeight}, decay: ${decay}d, rewrite: ${rewrite}, visibility: ${visibility})...`
+      `Searching [${mode}] (top: ${top}, threshold: ${threshold}, kw: ${keywordWeight}, sem: ${semanticWeight}, decay: ${decay}d, rewrite: ${rewrite}, sources: ${allowedSources?.join(",") ?? "all"})...`
     );
     const chunks = await retrieveChunks(query, {
       mode,
@@ -419,7 +419,7 @@ Examples:
       semanticWeight,
       decayHalfLife: decay,
       rewrite,
-      visibility: visibility as "public" | "internal" | "all",
+      allowedSources,
     });
 
     // Always show retrieval results

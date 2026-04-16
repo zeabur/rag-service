@@ -31,7 +31,9 @@ curl -s -X POST "$ZEABUR_RAG_URL/api/learn" \
 | `tags` | No | Array of tag strings for categorization |
 | `source_query` | No | Original user query that prompted this knowledge |
 
-Returns `{ "id": "LEARNED-...", "status": "indexed", "verified": false }`.
+Returns `{ "id": "LEARNED-...", "ids": ["LEARNED-...-0", ...], "chunk_count": N, "status": "indexed", "verified": false }`.
+
+Long content is split into multiple chunks automatically; `ids[0]` is the first (parent) chunk, subsequent chunks link back via `parent_id`. `id` matches `ids[0]` for backward compatibility.
 
 ## Guidelines
 

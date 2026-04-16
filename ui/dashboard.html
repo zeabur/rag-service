@@ -220,20 +220,9 @@
           <option value="verified">Verified</option>
           <option value="rejected">Rejected</option>
         </select>
-        <select x-model="chunkVisibilityFilter" @change="chunkPage = 0; loadChunks()" class="border rounded-lg px-3 py-2 text-sm">
-          <option value="">All Visibility</option>
-          <option value="public">Public</option>
-          <option value="internal">Internal</option>
-        </select>
         <input type="text" x-model="chunkSearch" @input.debounce.400ms="chunkPage = 0; loadChunks()"
           class="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           placeholder="Search ID / Title...">
-        <!-- Bulk action -->
-        <div x-show="chunkSelected.length > 0" class="flex items-center gap-2 ml-auto">
-          <span class="text-xs text-gray-500" x-text="`${chunkSelected.length} selected`"></span>
-          <button @click="bulkVisibility('public')" class="text-xs px-2 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50">Set Public</button>
-          <button @click="bulkVisibility('internal')" class="text-xs px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50">Set Internal</button>
-        </div>
       </div>
 
       <div class="bg-white rounded-lg border overflow-hidden">
@@ -245,7 +234,6 @@
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Source</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Status</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Visibility</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Tags</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Created</th>
             </tr>
@@ -265,11 +253,6 @@
                 <td class="px-4 py-3">
                   <span class="text-xs px-2 py-0.5 rounded-full"
                     :class="statusBadgeClass(c.status)" x-text="statusLabel(c.status)"></span>
-                </td>
-                <td class="px-4 py-3">
-                  <span class="text-xs px-2 py-0.5 rounded-full"
-                    :class="c.visibility === 'internal' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
-                    x-text="c.visibility || 'public'"></span>
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
@@ -584,47 +567,37 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-36">ID</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Tags</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-20">Status</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Visibility</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">Time</th>
-              <th class="px-2 py-3 w-32"></th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-40">Tags</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Status</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-28">Actor</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-24">Time</th>
+              <th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-16">Review</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <template x-for="c in learnedChunks" :key="c.id">
               <tr>
                 <!-- Main row -->
-                <td colspan="7" class="p-0">
+                <td colspan="6" class="p-0">
                   <div class="flex items-center hover:bg-gray-50 cursor-pointer" @click="c._expanded = !c._expanded">
-                    <div class="px-4 py-3 text-xs font-mono text-gray-400 w-36 truncate flex-shrink-0" x-text="c.id"></div>
-                    <div class="px-4 py-3 text-gray-800 flex-1 truncate" x-text="c.title"></div>
-                    <div class="px-4 py-3 w-32 flex-shrink-0">
-                      <div class="flex flex-wrap gap-1">
-                        <template x-for="tag in (c.tags || []).slice(0, 2)" :key="tag">
-                          <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded" x-text="tag"></span>
-                        </template>
-                      </div>
+                    <div class="px-4 py-3 text-gray-800 flex-1 min-w-0">
+                      <div class="truncate" x-text="c.title"></div>
+                      <div class="text-xs font-mono text-gray-400 truncate mt-0.5" x-text="c.id"></div>
                     </div>
-                    <div class="px-4 py-3 w-20 flex-shrink-0">
+                    <div class="px-4 py-3 w-40 flex-shrink-0 flex flex-wrap gap-1 overflow-hidden" style="max-height:2.5rem">
+                      <template x-for="tag in (c.tags || []).slice(0, 3)" :key="tag">
+                        <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded whitespace-nowrap" x-text="tag"></span>
+                      </template>
+                    </div>
+                    <div class="px-4 py-3 w-24 flex-shrink-0">
                       <span class="text-xs px-2 py-0.5 rounded-full"
                         :class="statusBadgeClass(c.status || (c.verified ? 'verified' : 'unverified'))"
                         x-text="statusLabel(c.status || (c.verified ? 'verified' : 'unverified'))"></span>
                     </div>
-                    <div class="px-4 py-3 w-24 flex-shrink-0">
-                      <span class="text-xs px-2 py-0.5 rounded-full"
-                        :class="(c.visibility || 'public') === 'internal' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
-                        x-text="c.visibility || 'public'"></span>
-                    </div>
-                    <div class="px-4 py-3 text-xs text-gray-400 w-28 flex-shrink-0" x-text="relativeTime(c.created_at)"></div>
-                    <div class="px-2 py-3 w-32 flex-shrink-0 flex items-center justify-end gap-1" @click.stop>
-                      <button @click="toggleLearnedVisibility(c)"
-                        class="text-xs px-1.5 py-1 rounded border transition"
-                        :class="(c.visibility || 'public') === 'public' ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-green-600 border-green-200 hover:bg-green-50'"
-                        :title="(c.visibility || 'public') === 'public' ? 'Set Internal' : 'Set Public'"
-                        x-text="(c.visibility || 'public') === 'public' ? 'Int.' : 'Pub.'"></button>
+                    <div class="px-4 py-3 w-28 flex-shrink-0 text-xs font-mono text-gray-500 truncate" x-text="c.actor || '—'"></div>
+                    <div class="px-4 py-3 text-xs text-gray-400 w-24 flex-shrink-0" x-text="relativeTime(c.created_at)"></div>
+                    <div class="px-2 py-3 w-16 flex-shrink-0 flex items-center justify-end gap-1" @click.stop>
                       <button x-show="(c.status || (c.verified ? 'verified' : 'unverified')) !== 'verified'"
                         @click="verifyChunk(c.id)"
                         class="text-xs text-green-600 hover:text-green-800 px-1.5 py-1 rounded border border-green-200 hover:bg-green-50 transition"
@@ -681,7 +654,7 @@
     <!-- ── Audit Log Tab ── -->
     <div x-show="activeTab === 'audit' && !loading && !error" x-cloak>
       <!-- Description -->
-      <p class="text-sm text-gray-500 mb-4">History of all knowledge base changes — chunk creation, verification, edits, visibility changes, report closures, and API key management.</p>
+      <p class="text-sm text-gray-500 mb-4">History of all knowledge base changes — chunk creation, verification, edits, report closures, and API key management.</p>
       <!-- Filter bar -->
       <div class="flex flex-wrap items-center gap-3 mb-4">
         <select x-model="auditActionFilter" @change="auditPage = 0; loadAuditLog()" class="border rounded-lg px-3 py-2 text-sm">
@@ -690,7 +663,6 @@
           <option value="verify">Verify</option>
           <option value="reject">Reject</option>
           <option value="edit">Edit</option>
-          <option value="visibility_change">Visibility Change</option>
           <option value="report_closed">Report Closed</option>
           <option value="api_key_created">API Key Created</option>
           <option value="api_key_revoked">API Key Revoked</option>
@@ -706,6 +678,7 @@
             <tr>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-40">Time</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Action</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Actor</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-40">Chunk ID</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Changes</th>
             </tr>
@@ -718,6 +691,7 @@
                   <span class="text-xs px-2 py-0.5 rounded-full font-medium"
                     :class="auditActionBadge(entry.action)" x-text="entry.action"></span>
                 </td>
+                <td class="px-4 py-3 text-xs font-mono text-gray-500" x-text="entry.actor || '—'"></td>
                 <td class="px-4 py-3">
                   <button x-show="entry.chunk_id" @click="openChunkDetail(entry.chunk_id)"
                     class="text-xs font-mono text-indigo-600 hover:text-indigo-800 hover:underline truncate"
@@ -1010,11 +984,6 @@
               <div><span class="text-xs text-gray-500">Status</span>
                 <div><span class="text-xs px-2 py-0.5 rounded-full" :class="statusBadgeClass(detailData.chunk?.status)" x-text="statusLabel(detailData.chunk?.status)"></span></div>
               </div>
-              <div><span class="text-xs text-gray-500">Visibility</span>
-                <div><span class="text-xs px-2 py-0.5 rounded-full"
-                  :class="detailData.chunk?.visibility === 'internal' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'"
-                  x-text="detailData.chunk?.visibility || 'public'"></span></div>
-              </div>
               <div><span class="text-xs text-gray-500">Created</span><div class="text-xs" x-text="detailData.chunk?.created_at ? new Date(detailData.chunk.created_at).toLocaleString() : '—'"></div></div>
               <div x-show="detailData.chunk?.url"><span class="text-xs text-gray-500">URL</span>
                 <div><a :href="detailData.chunk?.url" target="_blank" class="text-xs text-indigo-600 hover:underline break-all" x-text="detailData.chunk?.url"></a></div>
@@ -1043,10 +1012,6 @@
 
             <!-- Actions -->
             <div class="flex items-center gap-2 border-t pt-4">
-              <button @click="toggleChunkVisibility(detailData.chunk)"
-                class="text-xs px-3 py-1.5 rounded border transition"
-                :class="(detailData.chunk?.visibility || 'public') === 'public' ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-green-600 border-green-200 hover:bg-green-50'"
-                x-text="(detailData.chunk?.visibility || 'public') === 'public' ? 'Set Internal' : 'Set Public'"></button>
               <button x-show="detailData.chunk?.source === 'learned' && detailData.chunk?.status !== 'verified'"
                 @click="verifyChunk(detailData.chunk?.id); openChunkDetail(detailData.chunk?.id)"
                 class="text-xs text-green-600 px-3 py-1.5 rounded border border-green-200 hover:bg-green-50 transition">Verify</button>
@@ -1187,7 +1152,6 @@
         chunkPageSize: 50,
         chunkSourceFilter: '',
         chunkStatusFilter: '',
-        chunkVisibilityFilter: '',
         chunkSearch: '',
         chunkSelected: [],
 
@@ -1350,7 +1314,6 @@
             });
             if (this.chunkSourceFilter) params.set('source', this.chunkSourceFilter);
             if (this.chunkStatusFilter) params.set('status', this.chunkStatusFilter);
-            if (this.chunkVisibilityFilter) params.set('visibility', this.chunkVisibilityFilter);
             if (this.chunkSearch) params.set('search', this.chunkSearch);
             const res = await this.apiFetch(`/api/admin/chunks?${params}`);
             this.chunks = res.data || [];
@@ -1502,42 +1465,6 @@
           if (!confirm(`Reject ${id}?`)) return;
           await this.apiFetch(`/api/admin/learned/${id}/reject`, { method: 'POST' });
           await this.loadLearned();
-        },
-
-        async toggleChunkVisibility(chunk) {
-          if (!chunk) return;
-          const newVis = (chunk.visibility || 'public') === 'public' ? 'internal' : 'public';
-          await this.apiFetch(`/api/admin/chunks/${chunk.id}/visibility`, {
-            method: 'POST',
-            body: JSON.stringify({ visibility: newVis }),
-          });
-          // Refresh detail
-          if (this.detailOpen && this.detailType === 'chunk') {
-            await this.openChunkDetail(chunk.id);
-          }
-          // Refresh current tab
-          await this.loadTab();
-        },
-
-        async toggleLearnedVisibility(chunk) {
-          if (!chunk) return;
-          const newVis = (chunk.visibility || 'public') === 'public' ? 'internal' : 'public';
-          await this.apiFetch(`/api/admin/chunks/${chunk.id}/visibility`, {
-            method: 'POST',
-            body: JSON.stringify({ visibility: newVis }),
-          });
-          await this.loadLearned();
-        },
-
-        async bulkVisibility(visibility) {
-          if (this.chunkSelected.length === 0) return;
-          if (!confirm(`Set ${this.chunkSelected.length} items to ${visibility}?`)) return;
-          await this.apiFetch('/api/admin/chunks/bulk-visibility', {
-            method: 'POST',
-            body: JSON.stringify({ ids: this.chunkSelected, visibility }),
-          });
-          this.chunkSelected = [];
-          await this.loadChunks();
         },
 
         toggleAllChunks(e) {
@@ -1710,7 +1637,6 @@
           if (action === 'create') return 'bg-green-100 text-green-700';
           if (action === 'verify') return 'bg-blue-100 text-blue-700';
           if (action === 'reject') return 'bg-red-100 text-red-700';
-          if (action === 'visibility_change') return 'bg-purple-100 text-purple-700';
           return 'bg-gray-100 text-gray-600';
         },
 
